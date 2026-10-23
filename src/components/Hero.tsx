@@ -84,7 +84,7 @@ export const Hero: React.FC = () => {
               <div className="absolute inset-0 border border-[#FFC928]/20 rounded-2xl pointer-events-none" />
               
               <img
-                src="/src/assets/images/hero_gadget_showcase_1792754252457.jpg"
+                src={heroImage}
                 alt="MUAZ ELECTRONIC Signature Gadget Showcase"
                 className="w-full h-auto max-h-[460px] object-cover object-center group-hover:scale-[1.02] transition-transform duration-700 ease-out"
                 referrerPolicy="no-referrer"
