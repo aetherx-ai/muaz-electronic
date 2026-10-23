@@ -1,6 +1,7 @@
 import React from 'react';
 import { ArrowDown, MessageCircle, ShieldCheck, Zap, Truck } from 'lucide-react';
 import { WHATSAPP_INTL } from '../data/products';
+import heroImage from '../assets/images/hero_gadget_showcase_1792754252457.jpg';
 
 export const Hero: React.FC = () => {
   return (

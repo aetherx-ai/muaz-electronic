@@ -1,5 +1,12 @@
 import { Product, StoreSettings } from '../types';
 
+import hocoCoolerImage from '../assets/images/product_hoco_cooler_1792754252903.jpg';
+import hollylandMicImage from '../assets/images/product_hollyland_mic_1792754254527.jpg';
+import powerBankImage from '../assets/images/product_vendens_powerbank_1792754254403.jpg';
+import neckbandImage from '../assets/images/product_frb_neckband_1792754255689.jpg';
+import x9ConsoleImage from '../assets/images/product_x9_console_1792754256202.jpg';
+import airpodsImage from '../assets/images/product_airpods_black_1792754256092.jpg';
+
 export const OFFICIAL_LOGO_PATH = '/assets/aistudio/image_c39d3d0d.png';
 export const WHATSAPP_NUMBER = '01822486585';
 export const WHATSAPP_INTL = '8801822486585';
