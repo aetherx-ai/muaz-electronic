@@ -1,0 +1,6 @@
+{
+  "name": "MUAZ ELECTRONIC — Signature Edition",
+  "description": "Smart Gadgets • Better Life. Premium electronics and gadgets collection in Bangladesh with direct WhatsApp ordering.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
