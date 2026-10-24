@@ -1,0 +1,84 @@
+warning: in the working copy of 'src/components/Hero.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/data/products.ts', LF will be replaced by CRLF the next time Git touches it
+[1mdiff --git a/src/components/Hero.tsx b/src/components/Hero.tsx[m
+[1mindex d3664b6..e834fd0 100644[m
+[1m--- a/src/components/Hero.tsx[m
+[1m+++ b/src/components/Hero.tsx[m
+[36m@@ -84,7 +84,7 @@[m [mexport const Hero: React.FC = () => {[m
+               <div className="absolute inset-0 border border-[#FFC928]/20 rounded-2xl pointer-events-none" />[m
+               [m
+               <img[m
+[31m-                src="/src/assets/images/hero_gadget_showcase_1792754252457.jpg"[m
+[32m+[m[32m                src={heroImage}[m
+                 alt="MUAZ ELECTRONIC Signature Gadget Showcase"[m
+                 className="w-full h-auto max-h-[460px] object-cover object-center group-hover:scale-[1.02] transition-transform duration-700 ease-out"[m
+                 referrerPolicy="no-referrer"[m
+[1mdiff --git a/src/data/products.ts b/src/data/products.ts[m
+[1mindex e219595..21dbd96 100644[m
+[1m--- a/src/data/products.ts[m
+[1m+++ b/src/data/products.ts[m
+[36m@@ -1,4 +1,4 @@[m
+[31m-import { Product, StoreSettings } from '../types';[m
+[32m+[m[32m﻿import { Product, StoreSettings } from '../types';[m
+ [m
+ import hocoCoolerImage from '../assets/images/product_hoco_cooler_1792754252903.jpg';[m
+ import hollylandMicImage from '../assets/images/product_hollyland_mic_1792754254527.jpg';[m
+[36m@@ -12,7 +12,7 @@[m [mexport const WHATSAPP_NUMBER = '01822486585';[m
+ export const WHATSAPP_INTL = '8801822486585';[m
+ export const FACEBOOK_URL = 'https://www.facebook.com/share/1KwJp3ZvBy/';[m
+ export const STORE_NAME = 'MUAZ ELECTRONIC';[m
+[31m-export const STORE_TAGLINE = 'Smart Gadgets • Better Life';[m
+[32m+[m[32mexport const STORE_TAGLINE = 'Smart Gadgets â€¢ Better Life';[m
+ [m
+ export const DEFAULT_STORE_SETTINGS: StoreSettings = {[m
+   storeName: STORE_NAME,[m
+[36m@@ -28,151 +28,151 @@[m [mexport const INITIAL_PRODUCTS: Product[] = [[m
+   {[m
+     id: 'hoco-ga6-cooler',[m
+     name: 'Hoco GA6 Glacier AI Semiconductor Mobile Cooler',[m
+[31m-    bengaliName: 'হোচো জিএ৬ সেমিকন্ডাক্টর মোবাইল কুলার',[m
+[32m+[m[32m    bengaliName: 'à¦¹à§‹à¦šà§‹ à¦œà¦¿à¦à§¬ à¦¸à§‡à¦®à¦¿à¦•à¦¨à§à¦¡à¦¾à¦•à§à¦Ÿà¦° à¦®à§‹à¦¬à¦¾à¦‡à¦² à¦•à§à¦²à¦¾à¦°',[m
+     price: 1150,[m
+     category: 'Mobile Accessories',[m
+     brand: 'Hoco',[m
+     stock: 133,[m
+     status: 'published',[m
+     isFeatured: true,[m
+[31m-    image: '/src/assets/images/product_hoco_cooler_1792754252903.jpg',[m
+[31m-    description: 'উচ্চক্ষমতাসম্পন্ন সেমিকন্ডাক্টর রেফ্রিজারেশন টেকনোলজিসহ মোবাইল ফোন কুলিং ফ্যান। দীর্ঘক্ষণ গেমিং বা লাইভ স্ট্রিমিংয়ে ফোন অতিরিক্ত গরম হওয়া থেকে রক্ষা করে এবং ফ্রেম ড্রপ প্রতিরোধ করে।',[m
+[32m+[m[32m    image: hocoCoolerImage,[m
+[32m+[m[32m    description: 'à¦‰à¦šà§à¦šà¦•à§à¦·à¦®à¦¤à¦¾à¦¸à¦®à§à¦ªà¦¨à§à¦¨ à¦¸à§‡à¦®à¦¿à¦•à¦¨à§à¦¡à¦¾à¦•à§à¦Ÿà¦° à¦°à§‡à¦«à§à¦°à¦¿à¦œà¦¾à¦°à§‡à¦¶à¦¨ à¦Ÿà§‡à¦•à¦¨à§‹à¦²à¦œà¦¿à¦¸à¦¹ à¦®à§‹à¦¬à¦¾à¦‡à¦² à¦«à§‹à¦¨ à¦•à§à¦²à¦¿à¦‚ à¦«à§à¦¯à¦¾à¦¨à¥¤ à¦¦à§€à¦°à§à¦˜à¦•à§à¦·à¦£ à¦—à§‡à¦®à¦¿à¦‚ à¦¬à¦¾ à¦²à¦¾à¦‡à¦­ à¦¸à§à¦Ÿà§à¦°à¦¿à¦®à¦¿à¦‚à§Ÿà§‡ à¦«à§‹à¦¨ à¦…à¦¤à¦¿à¦°à¦¿à¦•à§à¦¤ à¦—à¦°à¦® à¦¹à¦“à§Ÿà¦¾ à¦¥à§‡à¦•à§‡ à¦°à¦•à§à¦·à¦¾ à¦•à¦°à§‡ à¦à¦¬à¦‚ à¦«à§à¦°à§‡à¦® à¦¡à§à¦°à¦ª à¦ªà§à¦°à¦¤à¦¿à¦°à§‹à¦§ à¦•à¦°à§‡à¥¤',[m
+     features: [[m
+[31m-      'সেমিকন্ডাক্টর ইনস্ট্যান্ট কুলিং অ্যালয় প্লেট',[m
+[31m-      'নীরব কিন্তু শক্তিশালী টার্বো ফ্যান মোটর',[m
+[31m-      'টাইপ-সি হাই-স্পিড পাওয়ার সংযোগ',[m
+[31m-      'সার্বজনীন ক্ল্যাম্প ডিজাইন—যেকোনো স্মার্টফোনে সহজে ব্যবহারের উপযোগী'[m
+[32m+[m[32m      'à¦¸à§‡à¦®à¦¿à¦•à¦¨à§à¦¡à¦¾à¦•à§à¦Ÿà¦° à¦‡à¦¨à¦¸à§à¦Ÿà§à¦¯à¦¾à¦¨à§à¦Ÿ à¦•à§à¦²à¦¿à¦‚ à¦…à§à¦¯à¦¾à¦²à¦¯à¦¼ à¦ªà§à¦²à§‡à¦Ÿ',[m
+[32m+[m[32m      'à¦¨à§€à¦°à¦¬ à¦•à¦¿à¦¨à§à¦¤à§ à¦¶à¦•à§à¦¤à¦¿à¦¶à¦¾à¦²à§€ à¦Ÿà¦¾à¦°à§à¦¬à§‹ à¦«à§à¦¯à¦¾à¦¨ à¦®à§‹à¦Ÿà¦°',[m
+[32m+[m[32m      'à¦Ÿà¦¾à¦‡à¦ª-à¦¸à¦¿ à¦¹à¦¾à¦‡-à¦¸à§à¦ªà¦¿à¦¡ à¦ªà¦¾à¦“à¦¯à¦¼à¦¾à¦° à¦¸à¦‚à¦¯à§‹à¦—',[m
+[32m+[m[32m      'à¦¸à¦¾à¦°à§à¦¬à¦œà¦¨à§€à¦¨ à¦•à§à¦²à§à¦¯à¦¾à¦®à§à¦ª à¦¡à¦¿à¦œà¦¾à¦‡à¦¨â€”à¦¯à§‡à¦•à§‹à¦¨à§‹ à¦¸à§à¦®à¦¾à¦°à§à¦Ÿà¦«à§‹à¦¨à§‡ à¦¸à¦¹à¦œà§‡ à¦¬à§à¦¯à¦¬à¦¹à¦¾à¦°à§‡à¦° à¦‰à¦ªà¦¯à§‹à¦—à§€'[m
+     ],[m
+     specs: [[m
+[31m-      { label: 'কুলিং মেকানিজম', value: 'Semiconductor + Turbo Fan' },[m
+[31m-      { label: 'উপাদান', value: 'ABS + Aluminum Alloy' },[m
+[31m-      { label: 'মডেল', value: 'Hoco GA6 Glacier' },[m
+[31m-      { label: 'বর্তমান স্টক', value: '১৩৩ পিস উপলব্ধ' }[m
+[32m+[m[32m      { label: 'à¦•à§à¦²à¦¿à¦‚ à¦®à§‡à¦•à¦¾à¦¨à¦¿à¦œà¦®', value: 'Semiconductor + Turbo Fan' },[m
+[32m+[m[32m      { label: 'à¦‰à¦ªà¦¾à¦¦à¦¾à¦¨', value: 'ABS + Aluminum Alloy' },[m
+[32m+[m[32m      { label: 'à¦®à¦¡à§‡à¦²', value: 'Hoco GA6 Glacier' },[m
+[32m+[m[32m      { label: 'à¦¬à¦°à§à¦¤à¦®à¦¾à¦¨ à¦¸à§à¦Ÿà¦•', value: 'à§§à§©à§© à¦ªà¦¿à¦¸ à¦‰à¦ªà¦²à¦¬à§à¦§' }[m
+     ][m
+   },[m
+   {[m
+     id: 'hollyland-lark-m2',[m
+     name: 'Hollyland Lark M2 1:1 mastercopy',[m
+[31m-    bengaliName: 'হলিভ্যান্ড লার্ক এম২ ১:১ মাস্টারকপি মাইক্রোফোন',[m
+[32m+[m[32m    bengaliName: 'à¦¹à¦²à¦¿à¦­à§à¦¯à¦¾à¦¨à§à¦¡ à¦²à¦¾à¦°à§à¦• à¦à¦®à§¨ à§§:à§§ à¦®à¦¾à¦¸à§à¦Ÿà¦¾à¦°à¦•à¦ªà¦¿ à¦®à¦¾à¦‡à¦•à§à¦°à§‹à¦«à§‹à¦¨',[m
+     price: 1400,[m
+     category: 'Audio & Microphones',[m
+     brand: 'Hollyland',[m
+     stock: 45,[m
+     status: 'published',[m
+     isFeatured: true,[m
+[31m-    image: '/src/assets/images/product_hollyland_mic_1792754254527.jpg',[m
+[31m-    description: 'বাটন-সাইজ আল্ট্রা-লাইটওয়েট ওয়্যারলেস ল্যাভ্যালিয়ার মাইক্রোফোন সিস্টেম। ক্রিস

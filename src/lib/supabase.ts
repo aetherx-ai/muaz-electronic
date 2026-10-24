@@ -1,8 +1,14 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { Product, StoreSettings, AdminUser } from '../types';
-import { INITIAL_PRODUCTS, INITIAL_CATEGORIES, DEFAULT_STORE_SETTINGS } from '../data/products';
+import {
+  INITIAL_PRODUCTS,
+  INITIAL_CATEGORIES,
+  DEFAULT_STORE_SETTINGS,
+} from '../data/products';
 
-// Check if valid Supabase credentials are provided
+// -----------------------------------------------------------------------------
+// SUPABASE CONFIGURATION
+// -----------------------------------------------------------------------------
 const rawUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const rawKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
@@ -18,7 +24,6 @@ export const supabase: SupabaseClient | null = isSupabaseConfigured
   ? createClient(rawUrl, rawKey)
   : null;
 
-// Local storage keys for persistent fallback
 const STORAGE_KEYS = {
   PRODUCTS: 'muaz_db_products_v2',
   CATEGORIES: 'muaz_db_categories_v2',
@@ -26,60 +31,97 @@ const STORAGE_KEYS = {
   AUTH_SESSION: 'muaz_admin_session_v2',
 };
 
+const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
+
+const ALLOWED_IMAGE_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+];
+
+const IMAGE_EXTENSIONS: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'image/gif': 'gif',
+};
+
 // -----------------------------------------------------------------------------
-// LOCAL STORAGE PERSISTENCE HELPERS
+// LOCAL STORAGE HELPERS
 // -----------------------------------------------------------------------------
 function getLocalProducts(): Product[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.PRODUCTS);
+
     if (!raw) {
-      localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(INITIAL_PRODUCTS));
+      localStorage.setItem(
+        STORAGE_KEYS.PRODUCTS,
+        JSON.stringify(INITIAL_PRODUCTS),
+      );
       return INITIAL_PRODUCTS;
     }
-    return JSON.parse(raw);
-  } catch (err) {
-    console.error('Error reading local products:', err);
+
+    return JSON.parse(raw) as Product[];
+  } catch (error) {
+    console.error('Error reading local products:', error);
     return INITIAL_PRODUCTS;
   }
 }
 
 function saveLocalProducts(products: Product[]): void {
   try {
-    localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
-  } catch (err) {
-    console.error('Error saving local products:', err);
+    localStorage.setItem(
+      STORAGE_KEYS.PRODUCTS,
+      JSON.stringify(products),
+    );
+  } catch (error) {
+    console.error('Error saving local products:', error);
   }
 }
 
 function getLocalCategories(): string[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.CATEGORIES);
+
     if (!raw) {
-      localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(INITIAL_CATEGORIES));
+      localStorage.setItem(
+        STORAGE_KEYS.CATEGORIES,
+        JSON.stringify(INITIAL_CATEGORIES),
+      );
       return INITIAL_CATEGORIES;
     }
-    return JSON.parse(raw);
+
+    return JSON.parse(raw) as string[];
   } catch {
     return INITIAL_CATEGORIES;
   }
 }
 
-function saveLocalCategories(cats: string[]): void {
+function saveLocalCategories(categories: string[]): void {
   try {
-    localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(cats));
-  } catch (err) {
-    console.error('Error saving local categories:', err);
+    localStorage.setItem(
+      STORAGE_KEYS.CATEGORIES,
+      JSON.stringify(categories),
+    );
+  } catch (error) {
+    console.error('Error saving local categories:', error);
   }
 }
 
 function getLocalSettings(): StoreSettings {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.SETTINGS);
+
     if (!raw) {
-      localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(DEFAULT_STORE_SETTINGS));
+      localStorage.setItem(
+        STORAGE_KEYS.SETTINGS,
+        JSON.stringify(DEFAULT_STORE_SETTINGS),
+      );
       return DEFAULT_STORE_SETTINGS;
     }
-    return JSON.parse(raw);
+
+    return JSON.parse(raw) as StoreSettings;
   } catch {
     return DEFAULT_STORE_SETTINGS;
   }
@@ -87,9 +129,12 @@ function getLocalSettings(): StoreSettings {
 
 function saveLocalSettings(settings: StoreSettings): void {
   try {
-    localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
-  } catch (err) {
-    console.error('Error saving local settings:', err);
+    localStorage.setItem(
+      STORAGE_KEYS.SETTINGS,
+      JSON.stringify(settings),
+    );
+  } catch (error) {
+    console.error('Error saving local settings:', error);
   }
 }
 
@@ -97,89 +142,113 @@ function saveLocalSettings(settings: StoreSettings): void {
 // AUTHENTICATION SERVICE
 // -----------------------------------------------------------------------------
 export const authService = {
-  async login(email: string, password: string): Promise<{ user: AdminUser | null; error: string | null }> {
-    if (isSupabaseConfigured && supabase) {
+  async login(
+    email: string,
+    password: string,
+  ): Promise<{ user: AdminUser | null; error: string | null }> {
+    if (!isSupabaseConfigured || !supabase) {
+      return {
+        user: null,
+        error: 'Supabase কনফিগার করা নেই। Admin login করা সম্ভব নয়।',
+      };
+    }
+
+    try {
       const { data, error } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password,
       });
 
-      if (error) {
-        return { user: null, error: error.message };
+      if (error || !data.user) {
+        return {
+          user: null,
+          error: error?.message || 'Login ব্যর্থ হয়েছে।',
+        };
+      }
+
+      // Verify the authenticated user against the admin allowlist.
+      const { data: admin, error: adminError } = await supabase
+        .from('admin_users')
+        .select('user_id, is_active')
+        .eq('user_id', data.user.id)
+        .eq('is_active', true)
+        .maybeSingle();
+
+      if (adminError || !admin) {
+        await supabase.auth.signOut();
+
+        return {
+          user: null,
+          error: adminError
+            ? `Admin access যাচাই করা যায়নি: ${adminError.message}`
+            : 'এই account-কে Admin হিসেবে অনুমোদন দেওয়া হয়নি।',
+        };
       }
 
       const user: AdminUser = {
         id: data.user.id,
-        email: data.user.email || email,
+        email: data.user.email || email.trim(),
         role: 'admin',
         name: data.user.user_metadata?.full_name || 'Admin',
       };
+
       return { user, error: null };
-    }
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : 'অজানা সমস্যা';
 
-    // High-fidelity local fallback authentication
-    // Default admin account: admin@muazelectronic.com / admin123
-    // Or allows authorized credentials with proper validation
-    const trimmedEmail = email.trim().toLowerCase();
-    if (!trimmedEmail || !password) {
-      return { user: null, error: 'ইমেইল এবং পাসওয়ার্ড দেওয়া আবশ্যক' };
+      return { user: null, error: message };
     }
-
-    if (
-      (trimmedEmail === 'admin@muazelectronic.com' && password === 'admin123') ||
-      (trimmedEmail === 'itsmasud25@gmail.com' && password.length >= 6) ||
-      (trimmedEmail.includes('admin') && password.length >= 6)
-    ) {
-      const user: AdminUser = {
-        id: 'admin-local-1',
-        email: trimmedEmail,
-        role: 'admin',
-        name: 'Authorized Administrator',
-      };
-      localStorage.setItem(
-        STORAGE_KEYS.AUTH_SESSION,
-        JSON.stringify({ user, expiresAt: Date.now() + 24 * 60 * 60 * 1000 })
-      );
-      return { user, error: null };
-    }
-
-    return {
-      user: null,
-      error: 'ভুল ইমেইল অথবা পাসওয়ার্ড। অনুগ্রহ করে সঠিক এডমিন ক্রেডেনশিয়াল ব্যবহার করুন। (ডেমো: admin@muazelectronic.com / admin123)',
-    };
   },
 
   async logout(): Promise<void> {
-    if (isSupabaseConfigured && supabase) {
-      await supabase.auth.signOut();
+    try {
+      if (supabase) {
+        const { error } = await supabase.auth.signOut();
+
+        if (error) {
+          console.error('Supabase logout error:', error.message);
+        }
+      }
+    } finally {
+      localStorage.removeItem(STORAGE_KEYS.AUTH_SESSION);
     }
-    localStorage.removeItem(STORAGE_KEYS.AUTH_SESSION);
   },
 
   async getCurrentUser(): Promise<AdminUser | null> {
-    if (isSupabaseConfigured && supabase) {
-      const { data } = await supabase.auth.getSession();
-      if (data?.session?.user) {
-        return {
-          id: data.session.user.id,
-          email: data.session.user.email || '',
-          role: 'admin',
-          name: data.session.user.user_metadata?.full_name || 'Admin',
-        };
-      }
+    if (!isSupabaseConfigured || !supabase) {
       return null;
     }
 
     try {
-      const raw = localStorage.getItem(STORAGE_KEYS.AUTH_SESSION);
-      if (!raw) return null;
-      const parsed = JSON.parse(raw);
-      if (parsed.expiresAt && parsed.expiresAt > Date.now()) {
-        return parsed.user;
+      const { data, error } = await supabase.auth.getSession();
+
+      if (error || !data.session?.user) {
+        return null;
       }
-      localStorage.removeItem(STORAGE_KEYS.AUTH_SESSION);
-      return null;
-    } catch {
+
+      const authUser = data.session.user;
+
+      const { data: admin, error: adminError } = await supabase
+        .from('admin_users')
+        .select('user_id, is_active')
+        .eq('user_id', authUser.id)
+        .eq('is_active', true)
+        .maybeSingle();
+
+      if (adminError || !admin) {
+        await supabase.auth.signOut();
+        return null;
+      }
+
+      return {
+        id: authUser.id,
+        email: authUser.email || '',
+        role: 'admin',
+        name: authUser.user_metadata?.full_name || 'Admin',
+      };
+    } catch (error) {
+      console.error('Unable to verify current admin:', error);
       return null;
     }
   },
@@ -189,7 +258,6 @@ export const authService = {
 // PRODUCT SERVICE
 // -----------------------------------------------------------------------------
 export const productService = {
-  // Public storefront products (only published)
   async getPublicProducts(): Promise<Product[]> {
     if (isSupabaseConfigured && supabase) {
       const { data, error } = await supabase
@@ -201,12 +269,15 @@ export const productService = {
       if (!error && data) {
         return data.map(mapDbProductToProduct);
       }
+
+      console.error('Unable to load public products:', error?.message);
     }
-    const all = getLocalProducts();
-    return all.filter((p) => p.status === 'published');
+
+    return getLocalProducts().filter(
+      (product) => product.status === 'published',
+    );
   },
 
-  // Admin products (published + drafts)
   async getAllProductsAdmin(): Promise<Product[]> {
     if (isSupabaseConfigured && supabase) {
       const { data, error } = await supabase
@@ -217,7 +288,10 @@ export const productService = {
       if (!error && data) {
         return data.map(mapDbProductToProduct);
       }
+
+      console.error('Unable to load admin products:', error?.message);
     }
+
     return getLocalProducts();
   },
 
@@ -227,88 +301,126 @@ export const productService = {
         .from('products')
         .select('*')
         .eq('id', id)
-        .single();
+        .maybeSingle();
+
       if (!error && data) {
         return mapDbProductToProduct(data);
       }
     }
-    const all = getLocalProducts();
-    return all.find((p) => p.id === id) || null;
+
+    return getLocalProducts().find((product) => product.id === id) || null;
   },
 
-  async createProduct(productData: Omit<Product, 'id'>, imageFile?: File): Promise<{ product: Product | null; error: string | null; success: boolean }> {
+  async createProduct(
+    productData: Omit<Product, 'id'>,
+    imageFile?: File,
+  ): Promise<{ product: Product | null; error: string | null; success: boolean }> {
     try {
       let imageUrl = productData.image;
 
-      // Handle image upload if a file is provided
       if (imageFile) {
-        const uploadRes = await this.uploadProductImage(imageFile);
-        if (uploadRes.error) {
-          return { product: null, error: uploadRes.error, success: false };
+        const upload = await this.uploadProductImage(imageFile);
+
+        if (upload.error || !upload.url) {
+          return {
+            product: null,
+            error: upload.error || 'ছবির URL পাওয়া যায়নি।',
+            success: false,
+          };
         }
-        if (uploadRes.url) {
-          imageUrl = uploadRes.url;
-        }
+
+        imageUrl = upload.url;
+      } else if (isBase64Image(imageUrl)) {
+        return {
+          product: null,
+          error: 'Base64 ছবি সরাসরি সংরক্ষণ করা যাবে না। ছবিটি আবার upload করুন।',
+          success: false,
+        };
       }
 
-      const newId = `product-${Date.now()}`;
-      const nowIso = new Date().toISOString();
+      const now = new Date().toISOString();
 
       const newProduct: Product = {
         ...productData,
-        id: newId,
+        id: `product-${Date.now()}`,
         image: imageUrl,
-        createdAt: nowIso,
-        updatedAt: nowIso,
+        createdAt: now,
+        updatedAt: now,
       };
 
       if (isSupabaseConfigured && supabase) {
-        const dbPayload = mapProductToDbPayload(newProduct);
         const { data, error } = await supabase
           .from('products')
-          .insert([dbPayload])
+          .insert([mapProductToDbPayload(newProduct)])
           .select()
           .single();
 
         if (error) {
-          return { product: null, error: error.message, success: false };
+          return {
+            product: null,
+            error: error.message,
+            success: false,
+          };
         }
-        return { product: mapDbProductToProduct(data), error: null, success: true };
+
+        return {
+          product: mapDbProductToProduct(data),
+          error: null,
+          success: true,
+        };
       }
 
-      // Local storage fallback
-      const current = getLocalProducts();
-      const updated = [newProduct, ...current];
-      saveLocalProducts(updated);
+      // Local fallback is retained for non-authenticated demo/storefront data.
+      const products = getLocalProducts();
+      saveLocalProducts([newProduct, ...products]);
 
       return { product: newProduct, error: null, success: true };
-    } catch (err: any) {
-      return { product: null, error: err.message || 'প্রোডাক্ট তৈরিতে সমস্যা হয়েছে', success: false };
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : 'প্রোডাক্ট তৈরিতে সমস্যা হয়েছে';
+
+      return { product: null, error: message, success: false };
     }
   },
 
-  async updateProduct(id: string, productData: Partial<Product>, imageFile?: File): Promise<{ product: Product | null; error: string | null; success: boolean }> {
+  async updateProduct(
+    id: string,
+    productData: Partial<Product>,
+    imageFile?: File,
+  ): Promise<{ product: Product | null; error: string | null; success: boolean }> {
     try {
       let imageUrl = productData.image;
 
       if (imageFile) {
-        const uploadRes = await this.uploadProductImage(imageFile);
-        if (uploadRes.error) {
-          return { product: null, error: uploadRes.error, success: false };
+        const upload = await this.uploadProductImage(imageFile);
+
+        if (upload.error || !upload.url) {
+          return {
+            product: null,
+            error: upload.error || 'ছবির URL পাওয়া যায়নি।',
+            success: false,
+          };
         }
-        if (uploadRes.url) {
-          imageUrl = uploadRes.url;
-        }
+
+        imageUrl = upload.url;
       }
 
-      const nowIso = new Date().toISOString();
+      const now = new Date().toISOString();
 
       if (isSupabaseConfigured && supabase) {
-        const payload: any = {
+        const payload: Record<string, unknown> = {
           ...mapPartialProductToDbPayload(productData),
-          updated_at: nowIso,
+          updated_at: now,
         };
-        if (imageUrl) payload.image = imageUrl;
+
+        // Do not re-submit an old Base64 image while editing other fields.
+        if (imageFile && imageUrl) {
+          payload.image = imageUrl;
+        } else if (imageUrl && !isBase64Image(imageUrl)) {
+          payload.image = imageUrl;
+        } else {
+          delete payload.image;
+        }
 
         const { data, error } = await supabase
           .from('products')
@@ -320,87 +432,151 @@ export const productService = {
         if (error) {
           return { product: null, error: error.message, success: false };
         }
-        return { product: mapDbProductToProduct(data), error: null, success: true };
+
+        return {
+          product: mapDbProductToProduct(data),
+          error: null,
+          success: true,
+        };
       }
 
-      // Local storage fallback
-      const current = getLocalProducts();
-      const index = current.findIndex((p) => p.id === id);
+      const products = getLocalProducts();
+      const index = products.findIndex((product) => product.id === id);
+
       if (index === -1) {
-        return { product: null, error: 'প্রোডাক্টটি খুঁজে পাওয়া যায়নি', success: false };
+        return {
+          product: null,
+          error: 'প্রোডাক্টটি খুঁজে পাওয়া যায়নি',
+          success: false,
+        };
       }
 
       const updatedProduct: Product = {
-        ...current[index],
+        ...products[index],
         ...productData,
-        ...(imageUrl ? { image: imageUrl } : {}),
-        updatedAt: nowIso,
+        ...(imageUrl && !isBase64Image(imageUrl) ? { image: imageUrl } : {}),
+        updatedAt: now,
       };
 
-      current[index] = updatedProduct;
-      saveLocalProducts(current);
+      products[index] = updatedProduct;
+      saveLocalProducts(products);
 
       return { product: updatedProduct, error: null, success: true };
-    } catch (err: any) {
-      return { product: null, error: err.message || 'প্রোডাক্ট আপডেটে সমস্যা হয়েছে', success: false };
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : 'প্রোডাক্ট আপডেটে সমস্যা হয়েছে';
+
+      return { product: null, error: message, success: false };
     }
   },
 
-  async deleteProduct(id: string): Promise<{ success: boolean; error: string | null }> {
+  async deleteProduct(
+    id: string,
+  ): Promise<{ success: boolean; error: string | null }> {
     try {
       if (isSupabaseConfigured && supabase) {
-        const { error } = await supabase.from('products').delete().eq('id', id);
-        if (error) return { success: false, error: error.message };
+        const { error } = await supabase
+          .from('products')
+          .delete()
+          .eq('id', id);
+
+        if (error) {
+          return { success: false, error: error.message };
+        }
+
         return { success: true, error: null };
       }
 
-      const current = getLocalProducts();
-      const filtered = current.filter((p) => p.id !== id);
-      saveLocalProducts(filtered);
+      const products = getLocalProducts().filter(
+        (product) => product.id !== id,
+      );
+
+      saveLocalProducts(products);
+
       return { success: true, error: null };
-    } catch (err: any) {
-      return { success: false, error: err.message || 'প্রোডাক্ট ডিলিট করা যায়নি' };
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : 'প্রোডাক্ট ডিলিট করা যায়নি';
+
+      return { success: false, error: message };
     }
   },
 
-  async uploadProductImage(file: File): Promise<{ url: string | null; error: string | null }> {
+  async uploadProductImage(
+    file: File,
+  ): Promise<{ url: string | null; error: string | null }> {
     try {
-      // If live Supabase storage is configured:
-      if (isSupabaseConfigured && supabase) {
-        const fileExt = file.name.split('.').pop();
-        const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
-        const filePath = `products/${fileName}`;
-
-        const { error: uploadError } = await supabase.storage
-          .from('product-images')
-          .upload(filePath, file);
-
-        if (uploadError) {
-          console.warn('Supabase storage upload failed, falling back to data URL:', uploadError.message);
-        } else {
-          const { data } = supabase.storage.from('product-images').getPublicUrl(filePath);
-          if (data?.publicUrl) {
-            return { url: data.publicUrl, error: null };
-          }
-        }
+      if (!isSupabaseConfigured || !supabase) {
+        return {
+          url: null,
+          error: 'Supabase সংযোগ নেই। ছবি upload করতে Supabase configure করুন।',
+        };
       }
 
-      // High-resolution Base64 fallback (persists in localStorage / state immediately)
-      return new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          resolve({ url: reader.result as string, error: null });
+      if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+        return {
+          url: null,
+          error: 'শুধু JPG, PNG, WebP অথবা GIF ছবি আপলোড করুন।',
         };
-        reader.onerror = () => {
-          resolve({ url: null, error: 'ছবি লোড করতে ব্যর্থ হয়েছে' });
+      }
+
+      if (file.size > MAX_IMAGE_SIZE) {
+        return {
+          url: null,
+          error: 'ছবির সাইজ সর্বোচ্চ 5 MB হতে পারবে।',
         };
-        reader.readAsDataURL(file);
-      });
-    } catch (err: any) {
-      return { url: null, error: err.message || 'ছবি আপলোডে সমস্যা হয়েছে' };
+      }
+
+      const extension = IMAGE_EXTENSIONS[file.type];
+
+      const fileName =
+        `${Date.now()}-${Math.random().toString(36).slice(2)}.${extension}`;
+
+      const filePath = `products/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('product-images')
+        .upload(filePath, file, {
+          contentType: file.type,
+          upsert: false,
+        });
+
+      if (uploadError) {
+        console.error('Product image upload failed:', uploadError.message);
+
+        return {
+          url: null,
+          error: `ছবি Storage-এ আপলোড হয়নি: ${uploadError.message}`,
+        };
+      }
+
+      const { data } = supabase.storage
+        .from('product-images')
+        .getPublicUrl(filePath);
+
+      if (!data?.publicUrl) {
+        return {
+          url: null,
+          error: 'ছবি আপলোড হয়েছে, কিন্তু public URL পাওয়া যায়নি।',
+        };
+      }
+
+      return { url: data.publicUrl, error: null };
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : 'অজানা সমস্যা';
+
+      return {
+        url: null,
+        error: `ছবি আপলোডে সমস্যা: ${message}`,
+      };
     }
   },
 };
+
+function isBase64Image(value: string | undefined): boolean {
+  return typeof value === 'string' && value.startsWith('data:image/');
+}
 
 // -----------------------------------------------------------------------------
 // CATEGORY SERVICE
@@ -412,46 +588,79 @@ export const categoryService = {
         .from('categories')
         .select('name')
         .order('name');
+
       if (!error && data && data.length > 0) {
-        const names = data.map((c) => c.name);
-        return ['All Products', ...names];
+        return ['All Products', ...data.map((category) => category.name)];
       }
     }
+
     return getLocalCategories();
   },
 
-  async addCategory(name: string): Promise<{ success: boolean; error: string | null }> {
+  async addCategory(
+    name: string,
+  ): Promise<{ success: boolean; error: string | null }> {
     const trimmed = name.trim();
-    if (!trimmed) return { success: false, error: 'ক্যাটাগরির নাম দিন' };
+
+    if (!trimmed) {
+      return { success: false, error: 'ক্যাটাগরির নাম দিন' };
+    }
 
     if (isSupabaseConfigured && supabase) {
       const slug = trimmed.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-      const { error } = await supabase.from('categories').insert([{ name: trimmed, slug }]);
-      if (error) return { success: false, error: error.message };
+
+      const { error } = await supabase
+        .from('categories')
+        .insert([{ name: trimmed, slug }]);
+
+      if (error) {
+        return { success: false, error: error.message };
+      }
+
       return { success: true, error: null };
     }
 
     const current = getLocalCategories();
+
     if (current.includes(trimmed)) {
-      return { success: false, error: 'এই ক্যাটাগরি ইতিমধ্যে বিদ্যমান' };
+      return {
+        success: false,
+        error: 'এই ক্যাটাগরি ইতিমধ্যে বিদ্যমান',
+      };
     }
+
     saveLocalCategories([...current, trimmed]);
+
     return { success: true, error: null };
   },
 
-  async deleteCategory(name: string): Promise<{ success: boolean; error: string | null }> {
+  async deleteCategory(
+    name: string,
+  ): Promise<{ success: boolean; error: string | null }> {
     if (name === 'All Products') {
-      return { success: false, error: 'ডিফল্ট ক্যাটাগরি ডিলিট করা সম্ভব নয়' };
+      return {
+        success: false,
+        error: 'ডিফল্ট ক্যাটাগরি ডিলিট করা সম্ভব নয়',
+      };
     }
 
     if (isSupabaseConfigured && supabase) {
-      const { error } = await supabase.from('categories').delete().eq('name', name);
-      if (error) return { success: false, error: error.message };
+      const { error } = await supabase
+        .from('categories')
+        .delete()
+        .eq('name', name);
+
+      if (error) {
+        return { success: false, error: error.message };
+      }
+
       return { success: true, error: null };
     }
 
-    const current = getLocalCategories();
-    saveLocalCategories(current.filter((c) => c !== name));
+    saveLocalCategories(
+      getLocalCategories().filter((category) => category !== name),
+    );
+
     return { success: true, error: null };
   },
 };
@@ -467,6 +676,7 @@ export const settingsService = {
         .select('*')
         .eq('id', 'default')
         .single();
+
       if (!error && data) {
         return {
           storeName: data.store_name,
@@ -479,10 +689,13 @@ export const settingsService = {
         };
       }
     }
+
     return getLocalSettings();
   },
 
-  async updateSettings(settings: StoreSettings): Promise<{ success: boolean; error: string | null }> {
+  async updateSettings(
+    settings: StoreSettings,
+  ): Promise<{ success: boolean; error: string | null }> {
     if (isSupabaseConfigured && supabase) {
       const { error } = await supabase
         .from('store_settings')
@@ -498,16 +711,21 @@ export const settingsService = {
         })
         .eq('id', 'default');
 
-      if (error) return { success: false, error: error.message };
+      if (error) {
+        return { success: false, error: error.message };
+      }
+
+      return { success: true, error: null };
     }
 
     saveLocalSettings(settings);
+
     return { success: true, error: null };
   },
 };
 
 // -----------------------------------------------------------------------------
-// DATA MAPPING HELPERS
+// DATABASE MAPPING HELPERS
 // -----------------------------------------------------------------------------
 function mapDbProductToProduct(row: any): Product {
   return {
@@ -530,39 +748,49 @@ function mapDbProductToProduct(row: any): Product {
   };
 }
 
-function mapProductToDbPayload(p: Product): any {
+function mapProductToDbPayload(product: Product): Record<string, unknown> {
   return {
-    id: p.id,
-    name: p.name,
-    bengali_name: p.bengaliName || null,
-    price: p.price,
-    sale_price: p.salePrice || null,
-    category: p.category,
-    brand: p.brand || 'MUAZ ELECTRONIC',
-    stock: p.stock,
-    status: p.status,
-    is_featured: Boolean(p.isFeatured),
-    image: p.image,
-    description: p.description,
-    features: p.features,
-    specs: p.specs || [],
+    id: product.id,
+    name: product.name,
+    bengali_name: product.bengaliName || null,
+    price: product.price,
+    sale_price: product.salePrice || null,
+    category: product.category,
+    brand: product.brand || 'MUAZ ELECTRONIC',
+    stock: product.stock,
+    status: product.status,
+    is_featured: Boolean(product.isFeatured),
+    image: product.image,
+    description: product.description,
+    features: product.features,
+    specs: product.specs || [],
   };
 }
 
-function mapPartialProductToDbPayload(p: Partial<Product>): any {
-  const payload: any = {};
-  if (p.name !== undefined) payload.name = p.name;
-  if (p.bengaliName !== undefined) payload.bengali_name = p.bengaliName;
-  if (p.price !== undefined) payload.price = p.price;
-  if (p.salePrice !== undefined) payload.sale_price = p.salePrice || null;
-  if (p.category !== undefined) payload.category = p.category;
-  if (p.brand !== undefined) payload.brand = p.brand;
-  if (p.stock !== undefined) payload.stock = p.stock;
-  if (p.status !== undefined) payload.status = p.status;
-  if (p.isFeatured !== undefined) payload.is_featured = p.isFeatured;
-  if (p.image !== undefined) payload.image = p.image;
-  if (p.description !== undefined) payload.description = p.description;
-  if (p.features !== undefined) payload.features = p.features;
-  if (p.specs !== undefined) payload.specs = p.specs;
+function mapPartialProductToDbPayload(
+  product: Partial<Product>,
+): Record<string, unknown> {
+  const payload: Record<string, unknown> = {};
+
+  if (product.name !== undefined) payload.name = product.name;
+  if (product.bengaliName !== undefined) {
+    payload.bengali_name = product.bengaliName;
+  }
+  if (product.price !== undefined) payload.price = product.price;
+  if (product.salePrice !== undefined) {
+    payload.sale_price = product.salePrice || null;
+  }
+  if (product.category !== undefined) payload.category = product.category;
+  if (product.brand !== undefined) payload.brand = product.brand;
+  if (product.stock !== undefined) payload.stock = product.stock;
+  if (product.status !== undefined) payload.status = product.status;
+  if (product.isFeatured !== undefined) {
+    payload.is_featured = product.isFeatured;
+  }
+  if (product.image !== undefined) payload.image = product.image;
+  if (product.description !== undefined) payload.description = product.description;
+  if (product.features !== undefined) payload.features = product.features;
+  if (product.specs !== undefined) payload.specs = product.specs;
+
   return payload;
 }
