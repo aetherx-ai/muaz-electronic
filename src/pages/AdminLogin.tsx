@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import {
   ArrowLeft,
@@ -10,7 +9,7 @@ import {
   AlertCircle,
   LoaderCircle,
   X,
-  ArrowUpRight,
+  ArrowRight,
 } from 'lucide-react';
 
 import {
@@ -30,7 +29,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
   onLoginSuccess,
   onBackToStore,
 }) => {
-  const { login } = useAuth();
+  const { login, isSupabaseConnected } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -74,232 +73,177 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
   };
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#080808] px-4 py-8 font-sans text-[#F5F3EC] sm:px-6 sm:py-12">
-
-      {/* Subtle background lighting */}
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#F8FAF9] px-4 py-8 font-sans text-[#111827] sm:px-6 sm:py-12">
+      
+      {/* Soft background ambient gradient */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute left-1/2 top-1/2 h-[420px] w-[420px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#C5A15B]/[0.035] blur-[110px]"
-      />
-
-      {/* Fine background grid */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 opacity-[0.025]"
-        style={{
-          backgroundImage:
-            'linear-gradient(#C5A15B 1px, transparent 1px), linear-gradient(90deg, #C5A15B 1px, transparent 1px)',
-          backgroundSize: '72px 72px',
-          maskImage:
-            'radial-gradient(ellipse at center, black, transparent 75%)',
-          WebkitMaskImage:
-            'radial-gradient(ellipse at center, black, transparent 75%)',
-        }}
+        className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[300px] bg-[#16A34A]/[0.05] blur-[90px] rounded-full"
       />
 
       <section className="relative z-10 w-full max-w-[420px]">
-
+        
         {/* Return to store */}
         <button
           type="button"
           onClick={onBackToStore}
-          className="group mb-8 inline-flex items-center gap-2.5 text-[12px] font-medium tracking-wide text-[#8F8B80] transition-colors duration-200 hover:text-[#DCC184] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C5A15B] focus-visible:ring-offset-4 focus-visible:ring-offset-[#080808]"
+          className="group mb-6 inline-flex items-center gap-2 text-[12.5px] font-medium text-gray-500 transition-colors hover:text-[#16A34A]"
         >
-          <ArrowLeft className="h-4 w-4 transition-transform duration-200 group-hover:-translate-x-1" />
+          <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-1" />
           <span>স্টোরে ফিরে যান</span>
         </button>
 
-        {/* Signature Card */}
-        <div className="relative overflow-hidden rounded-[24px] border border-[#C5A15B]/20 bg-[#10100F] shadow-[0_30px_100px_-40px_rgba(0,0,0,0.95)]">
-
-          {/* Fine gold top edge */}
-          <div
-            aria-hidden="true"
-            className="absolute left-[12%] right-[12%] top-0 h-px bg-gradient-to-r from-transparent via-[#D8BD7B]/80 to-transparent"
-          />
-
-          <div className="p-6 sm:p-9">
-
-            {/* Brand */}
-            <header className="mb-9 text-center">
-
-              <div className="mx-auto mb-6 flex h-[78px] w-[78px] items-center justify-center rounded-[20px] border border-[#C5A15B]/30 bg-[#090909] p-2.5 shadow-[0_8px_35px_-20px_rgba(197,161,91,0.35)]">
-                <img
-                  src={OFFICIAL_LOGO_PATH}
-                  alt={`${STORE_NAME} logo`}
-                  className="h-full w-full object-contain"
-                  referrerPolicy="no-referrer"
-                />
-              </div>
-
-              <p className="mb-3 text-[9px] font-semibold uppercase tracking-[0.35em] text-[#BCA36C]">
-                Signature Collection
-              </p>
-
-              <h1 className="text-[26px] font-semibold tracking-[0.12em] text-[#F5F3EC] sm:text-[30px]">
-                MUAZ <span className="font-normal text-[#C5A15B]">ADMIN</span>
-              </h1>
-
-              <div className="mx-auto mt-4 h-px w-12 bg-[#C5A15B]/60" />
-
-              <p className="mt-4 text-[12px] leading-6 text-[#858176]">
-                {STORE_TAGLINE}
-              </p>
-            </header>
-
-            {/* Form heading */}
-            <div className="mb-6">
-              <h2 className="text-[16px] font-medium tracking-wide text-[#EAE7DE]">
-                Welcome back
-              </h2>
-
-              <p className="mt-1.5 text-[12px] leading-5 text-[#777369]">
-                আপনার অ্যাডমিন অ্যাকাউন্টে প্রবেশ করুন।
-              </p>
+        {/* Clean White Card */}
+        <div className="relative overflow-hidden rounded-[24px] border border-gray-200/80 bg-white p-7 sm:p-9 shadow-[0_12px_40px_rgba(0,0,0,0.06)]">
+          
+          {/* Brand Header */}
+          <header className="mb-7 text-center">
+            <div className="mx-auto mb-4 flex h-[68px] w-[68px] items-center justify-center rounded-full border border-gray-200 bg-black p-1 shadow-xs">
+              <img
+                src={OFFICIAL_LOGO_PATH}
+                alt={`${STORE_NAME} logo`}
+                className="h-full w-full object-contain"
+                referrerPolicy="no-referrer"
+              />
             </div>
 
-            {/* Error */}
-            {error && (
-              <div
-                role="alert"
-                aria-live="polite"
-                className="mb-5 flex items-start gap-2.5 rounded-xl border border-red-500/20 bg-red-500/[0.06] p-3 text-[12px] leading-5 text-red-300"
-              >
-                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span className="text-[10px] font-bold uppercase tracking-wider text-[#16A34A] block mb-1">
+              {STORE_TAGLINE}
+            </span>
 
-                <span className="min-w-0 flex-1">{error}</span>
+            <h1 className="text-2xl font-bold tracking-tight text-[#111827]">
+              MUAZ <span className="text-[#16A34A]">ADMIN</span>
+            </h1>
+
+            <p className="mt-1 text-xs text-gray-500">
+              {isSupabaseConnected
+                ? 'আপনার অনুমোদিত অ্যাডমিন অ্যাকাউন্টে প্রবেশ করুন'
+                : 'অ্যাডমিন ডেমো মোড সক্রিয় — যেকোনো ইমেইল ও পাসওয়ার্ড দিন'}
+            </p>
+          </header>
+
+          {/* Error Notice */}
+          {error && (
+            <div
+              role="alert"
+              className="mb-5 flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 p-3 text-[12px] text-red-700"
+            >
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-500" />
+              <span className="flex-1">{error}</span>
+              <button
+                type="button"
+                onClick={() => setError(null)}
+                className="text-red-400 hover:text-red-600"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          )}
+
+          {/* Form */}
+          <form onSubmit={handleSubmit} className="space-y-4">
+            
+            {/* Email */}
+            <div>
+              <label
+                htmlFor="admin-email"
+                className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-gray-700"
+              >
+                <Mail className="h-3.5 w-3.5 text-[#16A34A]" />
+                ইমেইল অ্যাড্রেস
+              </label>
+
+              <input
+                id="admin-email"
+                name="email"
+                type="email"
+                autoComplete="username"
+                value={email}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  if (error) setError(null);
+                }}
+                placeholder="admin@muazelectronic.com"
+                required
+                disabled={loading}
+                className="h-[44px] w-full rounded-xl border border-gray-200 bg-[#F8FAF9] px-3.5 text-[13px] text-gray-900 outline-none transition-all placeholder:text-gray-400 focus:border-[#16A34A] focus:bg-white focus:ring-2 focus:ring-[#16A34A]/10 disabled:opacity-50"
+              />
+            </div>
+
+            {/* Password */}
+            <div>
+              <label
+                htmlFor="admin-password"
+                className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-gray-700"
+              >
+                <LockKeyhole className="h-3.5 w-3.5 text-[#16A34A]" />
+                পাসওয়ার্ড
+              </label>
+
+              <div className="relative">
+                <input
+                  id="admin-password"
+                  name="password"
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    if (error) setError(null);
+                  }}
+                  placeholder="আপনার পাসওয়ার্ড লিখুন"
+                  required
+                  disabled={loading}
+                  className="h-[44px] w-full rounded-xl border border-gray-200 bg-[#F8FAF9] py-2.5 pl-3.5 pr-11 text-[13px] text-gray-900 outline-none transition-all placeholder:text-gray-400 focus:border-[#16A34A] focus:bg-white focus:ring-2 focus:ring-[#16A34A]/10 disabled:opacity-50"
+                />
 
                 <button
                   type="button"
-                  onClick={() => setError(null)}
-                  aria-label="ত্রুটির বার্তা বন্ধ করুন"
-                  className="shrink-0 rounded p-0.5 text-red-300/70 hover:text-red-200"
+                  onClick={() => setShowPassword(!showPassword)}
+                  disabled={loading}
+                  aria-label={showPassword ? 'লুকান' : 'দেখুন'}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                 >
-                  <X className="h-4 w-4" />
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
-            )}
-
-            {/* Login Form */}
-            <form onSubmit={handleSubmit} className="space-y-5">
-
-              {/* Email */}
-              <div>
-                <label
-                  htmlFor="admin-email"
-                  className="mb-2.5 flex items-center gap-2 text-[11px] font-semibold tracking-wide text-[#C9C5BA]"
-                >
-                  <Mail className="h-3.5 w-3.5 text-[#C5A15B]" />
-                  ইমেইল অ্যাড্রেস
-                </label>
-
-                <input
-                  id="admin-email"
-                  name="email"
-                  type="email"
-                  autoComplete="username"
-                  value={email}
-                  onChange={(e) => {
-                    setEmail(e.target.value);
-                    if (error) setError(null);
-                  }}
-                  placeholder="admin@example.com"
-                  required
-                  disabled={loading}
-                  className="h-[49px] w-full rounded-xl border border-[#FFFFFF]/[0.09] bg-[#090909] px-4 text-[13px] text-[#F5F3EC] outline-none transition-all duration-200 placeholder:text-[#555249] hover:border-[#FFFFFF]/[0.16] focus:border-[#C5A15B]/70 focus:ring-2 focus:ring-[#C5A15B]/10 disabled:opacity-50"
-                />
-              </div>
-
-              {/* Password */}
-              <div>
-                <label
-                  htmlFor="admin-password"
-                  className="mb-2.5 flex items-center gap-2 text-[11px] font-semibold tracking-wide text-[#C9C5BA]"
-                >
-                  <LockKeyhole className="h-3.5 w-3.5 text-[#C5A15B]" />
-                  পাসওয়ার্ড
-                </label>
-
-                <div className="relative">
-                  <input
-                    id="admin-password"
-                    name="password"
-                    type={showPassword ? 'text' : 'password'}
-                    autoComplete="current-password"
-                    value={password}
-                    onChange={(e) => {
-                      setPassword(e.target.value);
-                      if (error) setError(null);
-                    }}
-                    placeholder="আপনার পাসওয়ার্ড লিখুন"
-                    required
-                    disabled={loading}
-                    className="h-[49px] w-full rounded-xl border border-[#FFFFFF]/[0.09] bg-[#090909] py-3 pl-4 pr-12 text-[13px] text-[#F5F3EC] outline-none transition-all duration-200 placeholder:text-[#555249] hover:border-[#FFFFFF]/[0.16] focus:border-[#C5A15B]/70 focus:ring-2 focus:ring-[#C5A15B]/10 disabled:opacity-50"
-                  />
-
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword((value) => !value)}
-                    disabled={loading}
-                    aria-label={
-                      showPassword ? 'পাসওয়ার্ড লুকান' : 'পাসওয়ার্ড দেখুন'
-                    }
-                    aria-pressed={showPassword}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1.5 text-[#777369] transition-colors hover:text-[#DCC184] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C5A15B] disabled:opacity-50"
-                  >
-                    {showPassword ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
-                  </button>
-                </div>
-              </div>
-
-              {/* Submit */}
-              <button
-                type="submit"
-                disabled={loading}
-                className="group mt-2 flex min-h-[50px] w-full items-center justify-center gap-2.5 rounded-xl border border-[#E1C982]/30 bg-[#C5A15B] px-4 py-3 text-[11px] font-bold uppercase tracking-[0.13em] text-[#11100C] transition-all duration-200 hover:border-[#F0DBA5] hover:bg-[#D9BB78] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E1C982] focus-visible:ring-offset-2 focus-visible:ring-offset-[#10100F] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {loading ? (
-                  <>
-                    <LoaderCircle className="h-4 w-4 animate-spin" />
-                    <span>যাচাই করা হচ্ছে...</span>
-                  </>
-                ) : (
-                  <>
-                    <ShieldCheck className="h-4 w-4" />
-                    <span>অ্যাডমিন প্যানেলে প্রবেশ</span>
-                    <ArrowUpRight className="h-4 w-4 transition-transform duration-200 group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
-                  </>
-                )}
-              </button>
-            </form>
-
-            {/* Security footer */}
-            <div className="mt-7 border-t border-white/[0.07] pt-5">
-              <div className="flex items-center justify-center gap-2 text-[#777369]">
-                <ShieldCheck className="h-3.5 w-3.5 text-[#B49A5A]" />
-
-                <span className="text-[10px] tracking-wide">
-                  Secure Administration Portal
-                </span>
-              </div>
             </div>
+
+            {/* Submit */}
+            <button
+              type="submit"
+              disabled={loading}
+              className="mt-2 flex h-[46px] w-full items-center justify-center gap-2 rounded-xl bg-[#16A34A] hover:bg-[#15803D] active:scale-[0.98] px-4 font-semibold text-xs sm:text-[13px] text-white shadow-[0_2px_12px_rgba(22,163,74,0.25)] transition-all disabled:opacity-60"
+            >
+              {loading ? (
+                <>
+                  <LoaderCircle className="h-4 w-4 animate-spin" />
+                  <span>যাচাই করা হচ্ছে...</span>
+                </>
+              ) : (
+                <>
+                  <ShieldCheck className="h-4 w-4" />
+                  <span>অ্যাডমিন প্যানেলে প্রবেশ করুন</span>
+                  <ArrowRight className="h-4 w-4" />
+                </>
+              )}
+            </button>
+          </form>
+
+          {/* Footer Security Badge */}
+          <div className="mt-6 border-t border-gray-100 pt-4 text-center">
+            <span className="text-[11px] text-gray-400 flex items-center justify-center gap-1.5">
+              <ShieldCheck className="h-3.5 w-3.5 text-[#16A34A]" />
+              নিরাপদ অ্যাডমিন কন্ট্রোল সিস্টেম
+            </span>
           </div>
+
         </div>
 
-        {/* Page footer */}
-        <footer className="mt-7 text-center">
-          <p className="text-[10px] tracking-wide text-[#69665D]">
-            © {new Date().getFullYear()} {STORE_NAME}
-          </p>
+        <p className="mt-6 text-center text-[11px] text-gray-400">
+          © {new Date().getFullYear()} {STORE_NAME}. সর্বস্বত্ব সংরক্ষিত।
+        </p>
 
-          <p className="mt-1.5 text-[9px] uppercase tracking-[0.2em] text-[#4F4C44]">
-            Designed for excellence
-          </p>
-        </footer>
       </section>
     </main>
   );

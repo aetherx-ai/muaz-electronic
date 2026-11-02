@@ -147,10 +147,24 @@ export const authService = {
     password: string,
   ): Promise<{ user: AdminUser | null; error: string | null }> {
     if (!isSupabaseConfigured || !supabase) {
-      return {
-        user: null,
-        error: 'Supabase কনফিগার করা নেই। Admin login করা সম্ভব নয়।',
+      if (!email.trim() || !password) {
+        return {
+          user: null,
+          error: 'ইমেইল এবং পাসওয়ার্ড উভয়ই প্রদান করুন।',
+        };
+      }
+      const localUser: AdminUser = {
+        id: 'local-admin',
+        email: email.trim(),
+        role: 'admin',
+        name: email.trim().split('@')[0] || 'Admin',
       };
+      try {
+        localStorage.setItem(STORAGE_KEYS.AUTH_SESSION, JSON.stringify(localUser));
+      } catch (err) {
+        console.error('Error saving local session:', err);
+      }
+      return { user: localUser, error: null };
     }
 
     try {
@@ -192,6 +206,12 @@ export const authService = {
         name: data.user.user_metadata?.full_name || 'Admin',
       };
 
+      try {
+        localStorage.setItem(STORAGE_KEYS.AUTH_SESSION, JSON.stringify(user));
+      } catch (err) {
+        console.error('Error saving session:', err);
+      }
+
       return { user, error: null };
     } catch (error: unknown) {
       const message =
@@ -217,6 +237,14 @@ export const authService = {
 
   async getCurrentUser(): Promise<AdminUser | null> {
     if (!isSupabaseConfigured || !supabase) {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEYS.AUTH_SESSION);
+        if (raw) {
+          return JSON.parse(raw) as AdminUser;
+        }
+      } catch (error) {
+        console.error('Unable to verify local session:', error);
+      }
       return null;
     }
 

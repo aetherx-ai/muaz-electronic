@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Search, SlidersHorizontal, X } from 'lucide-react';
+import { Search, ArrowRight, X, SlidersHorizontal } from 'lucide-react';
 import { ProductCard } from './ProductCard';
 import { Product } from '../types';
 
@@ -21,9 +21,20 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
   const [selectedCategory, setSelectedCategory] = useState('All Products');
   const [sortBy, setSortBy] = useState<'default' | 'price-asc' | 'price-desc'>('default');
 
+  // Featured Products slice (exact match to reference screenshot header "ফিচার্ড পণ্য" / "সব দেখুন →")
+  const featuredProducts = useMemo(() => {
+    const list = products.filter((p) => p.isFeatured && p.status === 'published');
+    if (list.length < 4) {
+      const rest = products.filter((p) => !p.isFeatured && p.status === 'published');
+      return [...list, ...rest].slice(0, 4);
+    }
+    return list.slice(0, 4);
+  }, [products]);
+
+  // Catalog Products with category filter, search, and sorting
   const filteredProducts = useMemo(() => {
     return products.filter((product) => {
-      // Category match:
+      // Category match
       const matchesCategory =
         selectedCategory === 'All Products' ||
         product.category === selectedCategory ||
@@ -32,14 +43,15 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
             product.category === 'Audio & Microphones' ||
             product.category === 'Audio & Neckbands'));
 
-      // Search match:
+      // Search match
+      const query = searchQuery.trim().toLowerCase();
       const matchesSearch =
-        !searchQuery.trim() ||
-        product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (product.bengaliName && product.bengaliName.includes(searchQuery)) ||
-        product.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        product.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (product.brand && product.brand.toLowerCase().includes(searchQuery.toLowerCase()));
+        !query ||
+        product.name.toLowerCase().includes(query) ||
+        (product.bengaliName && product.bengaliName.toLowerCase().includes(query)) ||
+        product.category.toLowerCase().includes(query) ||
+        product.description.toLowerCase().includes(query) ||
+        (product.brand && product.brand.toLowerCase().includes(query));
 
       return matchesCategory && matchesSearch;
     }).sort((a, b) => {
@@ -47,141 +59,177 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
       const priceB = b.salePrice || b.price;
       if (sortBy === 'price-asc') return priceA - priceB;
       if (sortBy === 'price-desc') return priceB - priceA;
-      // Put featured items higher
-      if (a.isFeatured && !b.isFeatured) return -1;
-      if (!a.isFeatured && b.isFeatured) return 1;
       return 0;
     });
   }, [products, selectedCategory, searchQuery, sortBy]);
 
+  const handleViewAllClick = () => {
+    setSelectedCategory('All Products');
+    setSearchQuery('');
+    const element = document.getElementById('all-products-section');
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
   return (
-    <section id="products" className="py-16 sm:py-24 bg-[#070707]">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div className="bg-[#F8FAF9] py-6 sm:py-10">
+      <div className="max-w-7xl mx-auto px-3.5 sm:px-6 lg:px-8">
         
-        {/* Editorial Section Header */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-10 border-b border-[#292929]">
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <span className="w-5 h-[1.5px] bg-[#FFC928]" />
-              <span className="text-xs uppercase tracking-[0.2em] font-bold text-[#FFC928] font-display">
-                CURATED GADGETS
-              </span>
+        {/* ========================================================= */}
+        {/* 1. FEATURED PRODUCTS (EXACT MATCH TO REFERENCE SCREENSHOT) */}
+        {/* ========================================================= */}
+        <section id="featured" className="mb-10 sm:mb-14">
+          
+          {/* Section Header: "ফিচার্ড পণ্য" on Left, "সব দেখুন →" on Right */}
+          <div className="flex items-center justify-between mb-3.5 sm:mb-5">
+            <div className="flex items-center gap-2">
+              <h2 className="text-[19px] sm:text-[23px] font-extrabold text-[#111827] tracking-tight font-bengali">
+                ফিচার্ড পণ্য
+              </h2>
             </div>
-            <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-[#FAFAFA] tracking-tight">
-              আপনার পছন্দের প্রযুক্তি
-            </h2>
-            <p className="mt-2 text-sm sm:text-base text-[#A7A7A7] max-w-xl">
-              কাজ, বিনোদন ও দৈনন্দিন ব্যবহারের জন্য প্রয়োজনীয় গ্যাজেট খুঁজে নিন।
-            </p>
+
+            <button
+              type="button"
+              onClick={handleViewAllClick}
+              className="text-[12.5px] sm:text-[13.5px] font-semibold text-[#16A34A] hover:text-[#15803D] flex items-center gap-1 transition-colors group"
+            >
+              <span>সব দেখুন</span>
+              <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 transition-transform group-hover:translate-x-0.5" />
+            </button>
           </div>
 
-          {/* Search bar & Sorting bar */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto">
-            {/* Search Input Box */}
-            <div className="relative flex-1 sm:w-64">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#A7A7A7]" />
-              <input
-                ref={searchInputRef}
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="প্রোডাক্ট খুঁজুন..."
-                className="w-full pl-9 pr-8 py-2 text-sm bg-[#111111] border border-[#292929] rounded-lg text-[#FAFAFA] placeholder-[#A7A7A7]/60 focus:outline-none focus:border-[#FFC928] transition-colors"
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#A7A7A7] hover:text-[#FAFAFA]"
+          {/* 2-COLUMN MOBILE PRODUCT GRID (CARD | CARD with 10-12px gap) */}
+          <div className="grid grid-cols-2 gap-2.5 sm:gap-4 md:grid-cols-3 lg:grid-cols-4">
+            {featuredProducts.map((product) => (
+              <ProductCard key={`feat-${product.id}`} product={product} />
+            ))}
+          </div>
+        </section>
+
+        {/* ========================================================= */}
+        {/* 2. ALL PRODUCTS & CATEGORY DISCOVERY SECTION              */}
+        {/* ========================================================= */}
+        <section id="all-products-section" className="pt-6 border-t border-gray-200/60">
+          
+          {/* Section Header with Search & Filter Controls */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4 sm:mb-5">
+            <div>
+              <h2 className="text-[19px] sm:text-[23px] font-extrabold text-[#111827] tracking-tight font-bengali">
+                সকল গ্যাজেট কালেকশন
+              </h2>
+              <p className="text-xs text-[#6B7280] mt-0.5">
+                আপনার প্রয়োজনীয় ইলেকট্রনিক্স সামগ্রী অন্বেষণ করুন
+              </p>
+            </div>
+
+            {/* Search Input Box & Sort */}
+            <div className="flex items-center gap-2 w-full md:w-auto">
+              <div className="relative flex-1 md:w-68">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 stroke-[1.8]" />
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="গ্যাজেট বা প্রোডাক্ট খুঁজুন..."
+                  className="w-full pl-9 pr-8 py-2 text-xs sm:text-[13px] bg-white border border-gray-200/90 rounded-[12px] text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-[#16A34A] focus:ring-1 focus:ring-[#16A34A] shadow-2xs transition-all"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700"
+                    aria-label="মুছে ফেলুন"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Sort Selector */}
+              <div className="relative shrink-0">
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as any)}
+                  className="pl-3 pr-7 py-2 text-xs font-medium bg-white border border-gray-200/90 rounded-[12px] text-gray-700 focus:outline-none focus:border-[#16A34A] cursor-pointer shadow-2xs appearance-none"
                 >
-                  <X className="w-4 h-4" />
-                </button>
-              )}
-            </div>
-
-            {/* Sort Select */}
-            <div className="relative flex items-center">
-              <SlidersHorizontal className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#A7A7A7] pointer-events-none" />
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as any)}
-                className="w-full sm:w-auto pl-8 pr-8 py-2 text-xs font-medium bg-[#111111] border border-[#292929] rounded-lg text-[#FAFAFA] focus:outline-none focus:border-[#FFC928] cursor-pointer appearance-none"
-              >
-                <option value="default">প্রাইস ফিল্টার (সব)</option>
-                <option value="price-asc">দাম: কম থেকে বেশি</option>
-                <option value="price-desc">দাম: বেশি থেকে কম</option>
-              </select>
+                  <option value="default">ফিল্টার</option>
+                  <option value="price-asc">দাম: কম</option>
+                  <option value="price-desc">দাম: বেশি</option>
+                </select>
+                <SlidersHorizontal className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" />
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Clean Segmented Category Tabs */}
-        <div className="mt-8 flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
-          {categories.map((cat) => {
-            const isSelected = selectedCategory === cat;
-            return (
-              <button
-                key={cat}
-                onClick={() => setSelectedCategory(cat)}
-                className={`px-4 py-2 text-xs font-semibold rounded-lg transition-all whitespace-nowrap shrink-0 ${
-                  isSelected
-                    ? 'bg-[#FFC928] text-[#070707] shadow-sm'
-                    : 'bg-[#111111] hover:bg-[#171717] text-[#A7A7A7] hover:text-[#FAFAFA] border border-[#292929]'
-                }`}
-              >
-                {cat === 'All Products' ? 'সকল প্রোডাক্ট' : cat}
-              </button>
-            );
-          })}
-        </div>
+          {/* Clean Rounded Category Chips */}
+          <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-3 scrollbar-none mb-5">
+            {categories.map((cat) => {
+              const isSelected = selectedCategory === cat;
+              return (
+                <button
+                  key={cat}
+                  onClick={() => setSelectedCategory(cat)}
+                  className={`px-3.5 py-1.5 text-xs sm:text-[13px] font-medium rounded-full transition-all duration-150 whitespace-nowrap shrink-0 ${
+                    isSelected
+                      ? 'bg-[#16A34A] text-white shadow-[0_2px_8px_rgba(22,163,74,0.22)]'
+                      : 'bg-white hover:bg-emerald-50/50 text-[#4B5563] border border-gray-200/80 shadow-2xs'
+                  }`}
+                >
+                  {cat === 'All Products' ? 'সকল পণ্য' : cat}
+                </button>
+              );
+            })}
+          </div>
 
-        {/* Active Search/Filter summary if filtered */}
-        {(searchQuery || selectedCategory !== 'All Products') && (
-          <div className="mt-4 flex items-center justify-between text-xs text-[#A7A7A7]">
-            <span>
-              ফিল্টার অনুযায়ী মোট <strong>{filteredProducts.length}</strong> টি প্রোডাক্ট পাওয়া গেছে
-            </span>
-            {(searchQuery || selectedCategory !== 'All Products') && (
+          {/* Filter results count if active */}
+          {(searchQuery || selectedCategory !== 'All Products') && (
+            <div className="mb-4 flex items-center justify-between text-xs text-gray-600 bg-white p-2.5 rounded-xl border border-gray-200/70 shadow-2xs">
+              <span>
+                ফিল্টারে মোট <strong>{filteredProducts.length}</strong> টি প্রোডাক্ট পাওয়া গেছে
+              </span>
               <button
                 onClick={() => {
                   setSearchQuery('');
                   setSelectedCategory('All Products');
                 }}
-                className="text-[#FFC928] hover:underline"
+                className="text-[#16A34A] font-semibold hover:underline"
               >
-                ফিল্টার রিসেট করুন
+                রিসেট করুন
               </button>
-            )}
-          </div>
-        )}
+            </div>
+          )}
 
-        {/* Product Cards Grid: 3 columns desktop, 2 columns tablet, 1 or 2 mobile */}
-        {filteredProducts.length > 0 ? (
-          <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8">
-            {filteredProducts.map((product) => (
-              <ProductCard key={product.id} product={product} />
-            ))}
-          </div>
-        ) : (
-          <div className="mt-16 py-16 text-center border border-dashed border-[#292929] rounded-2xl bg-[#111111]/40">
-            <p className="text-base font-semibold text-[#FAFAFA]">
-              আপনার খোঁজার সাথে কোনো প্রোডাক্ট মিল পাওয়া যায়নি
-            </p>
-            <p className="mt-1 text-xs text-[#A7A7A7]">
-              দয়া করে সঠিক বানান দিয়ে চেষ্টা করুন অথবা অন্য ক্যাটাগরি নির্বাচন করুন
-            </p>
-            <button
-              onClick={() => {
-                setSearchQuery('');
-                setSelectedCategory('All Products');
-              }}
-              className="mt-4 px-4 py-2 text-xs font-semibold text-[#070707] bg-[#FFC928] hover:bg-[#F7D77B] rounded-lg transition-colors"
-            >
-              সকল প্রোডাক্ট প্রদর্শন করুন
-            </button>
-          </div>
-        )}
+          {/* MAIN 2-COLUMN MOBILE PRODUCT GRID (CARD | CARD) */}
+          {filteredProducts.length > 0 ? (
+            <div id="products" className="grid grid-cols-2 gap-2.5 sm:gap-4 md:grid-cols-3 lg:grid-cols-4">
+              {filteredProducts.map((product) => (
+                <ProductCard key={product.id} product={product} />
+              ))}
+            </div>
+          ) : (
+            <div className="py-14 text-center bg-white rounded-2xl border border-gray-200/70 p-6 shadow-2xs">
+              <p className="text-sm font-semibold text-gray-800">
+                আপনার খোঁজার সাথে কোনো প্রোডাক্ট মিল পাওয়া যায়নি
+              </p>
+              <p className="mt-1 text-xs text-gray-500">
+                দয়া করে সঠিক বানান দিয়ে চেষ্টা করুন অথবা অন্য ক্যাটাগরি বেছে নিন
+              </p>
+              <button
+                onClick={() => {
+                  setSearchQuery('');
+                  setSelectedCategory('All Products');
+                }}
+                className="mt-3 px-5 py-2 text-xs font-semibold text-white bg-[#16A34A] hover:bg-[#15803D] rounded-full transition-colors shadow-xs"
+              >
+                সকল পণ্য দেখুন
+              </button>
+            </div>
+          )}
+
+        </section>
 
       </div>
-    </section>
+    </div>
   );
 };

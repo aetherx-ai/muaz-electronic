@@ -1,194 +1,168 @@
-import React from 'react';
-import { ShoppingBag, Eye, MessageCircle, Check, Star, AlertCircle } from 'lucide-react';
+import React, { useState } from 'react';
+import { ShoppingCart, Heart, Share2, Check } from 'lucide-react';
 import { Product } from '../types';
 import { useCart } from '../context/CartContext';
-import { WHATSAPP_INTL } from '../data/products';
 
 interface ProductCardProps {
   product: Product;
 }
 
 export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
-  const { addToCart, items, setSelectedProductForDetail } = useCart();
+  const { addToCart, setSelectedProductForDetail } = useCart();
+  const [isWishlisted, setIsWishlisted] = useState(false);
+  const [justAdded, setJustAdded] = useState(false);
+  const [copiedShare, setCopiedShare] = useState(false);
 
-  const isItemInCart = items.some((item) => item.product.id === product.id);
   const isOutOfStock = product.stock <= 0;
-  const effectivePrice = product.salePrice || product.price;
+  const currentPrice = product.salePrice && product.salePrice < product.price ? product.salePrice : product.price;
+  const oldPrice = product.salePrice && product.salePrice < product.price ? product.price : null;
+  const discountPercent = oldPrice ? Math.round(((oldPrice - currentPrice) / oldPrice) * 100) : null;
 
-  const handleQuickWhatsApp = (e: React.MouseEvent) => {
+  const handleAddToCart = (e: React.MouseEvent) => {
     e.stopPropagation();
-    const text = `আসসালামু আলাইকুম, আমি Muaz Electronic থেকে সরাসরি "${product.name}" (মূল্য: ৳${effectivePrice.toLocaleString()}) অর্ডার করতে চাই।`;
-    window.open(`https://wa.me/${WHATSAPP_INTL}?text=${encodeURIComponent(text)}`, '_blank');
+    if (isOutOfStock) return;
+    addToCart(product, 1);
+    setJustAdded(true);
+    setTimeout(() => setJustAdded(false), 1200);
+  };
+
+  const handleWishlist = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsWishlisted(!isWishlisted);
+  };
+
+  const handleShare = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: product.name,
+          text: `${product.name} - MUAZ ELECTRONIC`,
+          url: window.location.href,
+        });
+        return;
+      } catch {
+        // Fallback to clipboard
+      }
+    }
+    navigator.clipboard?.writeText(window.location.href);
+    setCopiedShare(true);
+    setTimeout(() => setCopiedShare(false), 1500);
   };
 
   return (
     <article
       onClick={() => setSelectedProductForDetail(product)}
-      className="group relative bg-[#111111] hover:bg-[#141414] border border-[#292929] hover:border-[#FFC928]/40 rounded-xl overflow-hidden transition-all duration-200 flex flex-col cursor-pointer shadow-lg hover:shadow-xl hover:-translate-y-1"
+      className="group relative bg-white border border-[#111827]/[0.06] rounded-[20px] overflow-hidden flex flex-col justify-between cursor-pointer shadow-[0_4px_20px_rgba(0,0,0,0.03)] hover:shadow-[0_8px_28px_rgba(0,0,0,0.07)] md:hover:-translate-y-1 transition-all duration-200 text-left"
     >
-      {/* Product Image Frame */}
-      <div className="relative w-full aspect-[4/3] bg-[#0d0d0d] overflow-hidden border-b border-[#292929]/80">
+      {/* Top Image Container */}
+      <div className="relative w-full aspect-square bg-[#F8FAF9] rounded-t-[20px] overflow-hidden flex items-center justify-center p-3 sm:p-4 border-b border-[#111827]/[0.03]">
+        
+        {/* Product Image */}
         <img
           src={product.image}
           alt={product.name}
-          className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500 ease-out"
+          className="w-full h-full object-contain object-center group-hover:scale-[1.03] transition-transform duration-250 ease-out"
           referrerPolicy="no-referrer"
           loading="lazy"
         />
 
-        {/* Top Badges: Featured & Sale */}
-        <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5 pointer-events-none">
-          {product.isFeatured && (
-            <div className="text-[10px] font-bold bg-[#070707]/90 text-[#FFC928] px-2 py-0.5 rounded border border-[#FFC928]/40 flex items-center gap-1 font-display">
-              <Star className="w-3 h-3 fill-current" />
-              <span>FEATURED</span>
-            </div>
-          )}
-          {product.salePrice && product.salePrice < product.price && (
-            <div className="text-[10px] font-bold bg-rose-600 text-white px-2 py-0.5 rounded shadow-sm font-display">
-              অফার
-            </div>
-          )}
-        </div>
+        {/* Top-Left: Green Discount Badge */}
+        {discountPercent !== null && discountPercent > 0 && (
+          <div className="absolute top-2.5 left-2.5 z-10 bg-[#16A34A] text-white text-[11px] sm:text-[12px] font-bold px-2.5 py-0.5 rounded-full shadow-2xs tracking-tight">
+            -{discountPercent}%
+          </div>
+        )}
 
-        {/* Quick View Floating Button on Hover */}
-        <div className="absolute top-2.5 right-2.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex gap-1.5">
+        {/* Top-Right: Circular Wishlist & Share buttons */}
+        <div className="absolute top-2.5 right-2.5 z-10 flex flex-col gap-1.5 items-center">
+          
+          {/* Wishlist Button */}
           <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setSelectedProductForDetail(product);
-            }}
-            className="p-2 bg-[#070707]/90 hover:bg-[#FFC928] text-[#FAFAFA] hover:text-[#070707] rounded-lg backdrop-blur-sm transition-colors shadow-md"
-            title="বিস্তারিত দেখুন"
-            aria-label="বিস্তারিত দেখুন"
+            type="button"
+            onClick={handleWishlist}
+            className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white border border-gray-100/90 shadow-[0_2px_8px_rgba(0,0,0,0.05)] flex items-center justify-center transition-all duration-150 hover:scale-105 hover:border-emerald-200 ${
+              isWishlisted ? 'text-rose-500' : 'text-gray-400 hover:text-rose-500'
+            }`}
+            title="পছন্দের তালিকায় রাখুন"
+            aria-label="পছন্দ করুন"
           >
-            <Eye className="w-4 h-4" />
+            <Heart className={`w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[1.8] ${isWishlisted ? 'fill-current text-rose-500' : ''}`} />
           </button>
+
+          {/* Share Button */}
+          <button
+            type="button"
+            onClick={handleShare}
+            className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white border border-gray-100/90 shadow-[0_2px_8px_rgba(0,0,0,0.05)] flex items-center justify-center text-gray-400 hover:text-[#16A34A] transition-all duration-150 hover:scale-105 hover:border-emerald-200"
+            title="শেয়ার করুন"
+            aria-label="শেয়ার করুন"
+          >
+            {copiedShare ? (
+              <Check className="w-3.5 h-3.5 text-[#16A34A] stroke-[2]" />
+            ) : (
+              <Share2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[1.8]" />
+            )}
+          </button>
+
         </div>
 
-        {/* Stock status indicator */}
-        <div className="absolute bottom-2 left-2">
-          {isOutOfStock ? (
-            <div className="text-[10px] font-bold bg-rose-950/90 text-rose-300 px-2 py-0.5 rounded border border-rose-500/40">
-              আউট অব স্টক
-            </div>
-          ) : product.stock < 10 ? (
-            <div className="text-[10px] font-medium bg-[#070707]/90 text-amber-400 px-2 py-0.5 rounded border border-amber-500/40">
-              সীমিত স্টক: {product.stock} টি
-            </div>
-          ) : (
-            <div className="text-[10px] font-medium bg-[#070707]/85 text-[#F7D77B] px-2 py-0.5 rounded border border-[#FFC928]/30 font-display">
-              স্টক: {product.stock} পিস
-            </div>
-          )}
-        </div>
+        {/* Out of Stock overlay if applicable */}
+        {isOutOfStock && (
+          <div className="absolute inset-0 bg-white/75 backdrop-blur-2xs flex items-center justify-center z-10">
+            <span className="px-3 py-1 bg-gray-900 text-white text-[11px] font-bold rounded-full">
+              স্টক শেষ
+            </span>
+          </div>
+        )}
       </div>
 
-      {/* Card Body */}
-      <div className="p-5 flex-1 flex flex-col justify-between">
+      {/* Card Info & Pricing Area */}
+      <div className="p-3 sm:p-3.5 flex-1 flex flex-col justify-between">
         <div>
-          {/* Metadata: Category unboxed with subtle separator (Strict Zero-Pill) */}
-          <div className="flex items-center gap-2 text-xs text-[#A7A7A7] mb-1.5">
-            <span className="font-medium text-[#FFC928]/90 uppercase tracking-wider text-[11px]">
-              {product.category}
-            </span>
-            <span aria-hidden="true" className="text-[#292929]">·</span>
-            <span className="text-[11px]">{product.brand || 'অফিসিয়াল গ্যাজেট'}</span>
-          </div>
-
-          {/* Product Name (Readable, high contrast, clean typography) */}
-          <h3 className="text-base font-semibold text-[#FAFAFA] group-hover:text-[#FFC928] transition-colors line-clamp-2 leading-snug">
+          {/* Title - Fixed 2-line height for perfect grid alignment */}
+          <h3 className="text-[12.5px] sm:text-[13.5px] font-medium text-[#111827] group-hover:text-[#16A34A] transition-colors line-clamp-2 leading-snug h-[2.5rem] sm:h-[2.6rem]">
             {product.name}
           </h3>
 
-          {/* Bengali Subtitle / Context */}
-          {product.bengaliName && (
-            <p className="text-xs text-[#A7A7A7] mt-1 line-clamp-1 font-bengali">
-              {product.bengaliName}
-            </p>
-          )}
-        </div>
-
-        {/* Price and Actions */}
-        <div className="mt-4 pt-3 border-t border-[#292929]">
-          <div className="flex items-baseline justify-between mb-3">
-            <div>
-              <span className="text-[10px] uppercase tracking-wider text-[#A7A7A7] block leading-none mb-1">
-                প্রাইস
+          {/* Pricing: Bold Dark Current Price + Subtle Gray Old Price */}
+          <div className="mt-1.5 flex items-baseline gap-1.5">
+            <span className="text-[15px] sm:text-[17px] font-bold text-[#111827] font-display tabular-nums">
+              ৳{currentPrice.toLocaleString()}
+            </span>
+            {oldPrice && (
+              <span className="text-[11px] sm:text-[12px] text-[#9CA3AF] line-through font-normal tabular-nums">
+                ৳{oldPrice.toLocaleString()}
               </span>
-              <div className="flex items-baseline gap-2">
-                <span className="text-xl font-bold text-[#FFC928] font-display tabular-nums">
-                  ৳{effectivePrice.toLocaleString()}
-                </span>
-                {product.salePrice && product.salePrice < product.price && (
-                  <span className="text-xs text-[#A7A7A7] line-through font-mono">
-                    ৳{product.price.toLocaleString()}
-                  </span>
-                )}
-              </div>
-            </div>
-            
-            {/* Quick WhatsApp order text link */}
-            {!isOutOfStock && (
-              <button
-                onClick={handleQuickWhatsApp}
-                className="text-xs font-medium text-[#A7A7A7] hover:text-[#25D366] transition-colors flex items-center gap-1"
-                title="সরাসরি WhatsApp-এ অর্ডার"
-              >
-                <MessageCircle className="w-3.5 h-3.5" />
-                <span>WhatsApp অর্ডার</span>
-              </button>
             )}
           </div>
-
-          {/* Primary Action: Add to Cart */}
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                if (!isOutOfStock) {
-                  addToCart(product, 1);
-                }
-              }}
-              disabled={isOutOfStock}
-              className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-xs font-semibold transition-all ${
-                isOutOfStock
-                  ? 'bg-[#171717] text-[#A7A7A7] border border-[#292929] cursor-not-allowed opacity-60'
-                  : isItemInCart
-                  ? 'bg-[#171717] border border-[#FFC928] text-[#FFC928]'
-                  : 'bg-[#FFC928] hover:bg-[#F7D77B] text-[#070707] shadow-sm'
-              }`}
-            >
-              {isOutOfStock ? (
-                <>
-                  <AlertCircle className="w-3.5 h-3.5" />
-                  <span>স্টক শেষ</span>
-                </>
-              ) : isItemInCart ? (
-                <>
-                  <Check className="w-3.5 h-3.5" />
-                  <span>কার্টে যুক্ত আছে</span>
-                </>
-              ) : (
-                <>
-                  <ShoppingBag className="w-3.5 h-3.5" />
-                  <span>কার্টে যোগ করুন</span>
-                </>
-              )}
-            </button>
-
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setSelectedProductForDetail(product);
-              }}
-              className="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-lg text-xs font-medium bg-[#171717] hover:bg-[#202020] text-[#FAFAFA] border border-[#292929] hover:border-[#A7A7A7]/40 transition-colors"
-            >
-              <Eye className="w-3.5 h-3.5 text-[#A7A7A7]" />
-              <span>বিস্তারিত</span>
-            </button>
-          </div>
         </div>
+
+        {/* Add to Cart Button (42-46px height, 12-14px border radius, full width) */}
+        <button
+          type="button"
+          onClick={handleAddToCart}
+          disabled={isOutOfStock}
+          className={`w-full mt-2.5 h-[42px] sm:h-[44px] px-3 rounded-[12px] sm:rounded-[14px] font-semibold text-[11.5px] sm:text-[13px] flex items-center justify-center gap-1.5 transition-all duration-150 shadow-2xs ${
+            isOutOfStock
+              ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+              : justAdded
+              ? 'bg-[#15803D] text-white'
+              : 'bg-[#16A34A] hover:bg-[#15803D] active:scale-[0.98] text-white shadow-[0_2px_8px_rgba(22,163,74,0.22)]'
+          }`}
+        >
+          {justAdded ? (
+            <>
+              <Check className="w-4 h-4 stroke-[2.2]" />
+              <span>কার্টে যোগ হয়েছে</span>
+            </>
+          ) : (
+            <>
+              <ShoppingCart className="w-4 h-4 stroke-[1.9]" />
+              <span>কার্টে যোগ করুন</span>
+            </>
+          )}
+        </button>
       </div>
     </article>
   );

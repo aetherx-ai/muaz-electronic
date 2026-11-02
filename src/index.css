@@ -2,39 +2,44 @@
 
 @layer base {
   :root {
-    --bg-main: #070707;
-    --bg-deep: #030303;
-    --surface-elevated: #111111;
-    --surface-product: #171717;
-    --gold-signature: #FFC928;
-    --gold-champagne: #F7D77B;
-    --gold-deep: #B88718;
-    --text-primary: #FAFAFA;
-    --text-secondary: #A7A7A7;
-    --border-subtle: #292929;
+    --bg-page: #F8FAF9;
+    --bg-hero: #F3FBF5;
+    --surface-card: #FFFFFF;
+    --color-primary: #16A34A;
+    --color-primary-hover: #15803D;
+    --color-primary-soft: #ECFDF3;
+    --text-main: #111827;
+    --text-muted: #6B7280;
+    --border-light: #E5E7EB;
+  }
+
+  html {
+    scroll-behavior: smooth;
   }
 
   body {
-    background-color: #070707;
-    color: #FAFAFA;
+    background-color: #F8FAF9;
+    color: #111827;
     font-family: 'Hind Siliguri', 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
     overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
-  /* Custom scrollbar for dark luxury theme */
+  /* Refined, unobtrusive scrollbar */
   ::-webkit-scrollbar {
     width: 6px;
     height: 6px;
   }
   ::-webkit-scrollbar-track {
-    background: #070707;
+    background: #F1F4F2;
   }
   ::-webkit-scrollbar-thumb {
-    background: #292929;
-    border-radius: 3px;
+    background: #CBD5E1;
+    border-radius: 9999px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: #B88718;
+    background: #16A34A;
   }
 }
 
