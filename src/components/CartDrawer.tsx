@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Trash2, ShoppingBag, ArrowRight } from 'lucide-react';
+import { X, Trash2, ShoppingCart, ArrowRight } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 
 export const CartDrawer: React.FC = () => {
@@ -27,7 +27,7 @@ export const CartDrawer: React.FC = () => {
           <div className="p-4 sm:p-5 border-b border-gray-100 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-full bg-emerald-50 text-[#16A34A] flex items-center justify-center">
-                <ShoppingBag className="w-4 h-4" />
+                <ShoppingCart className="w-4 h-4 stroke-[1.8]" />
               </div>
               <h2 className="text-base sm:text-lg font-bold text-gray-900">
                 শপিং ব্যাগ ({totalItems})
@@ -38,7 +38,7 @@ export const CartDrawer: React.FC = () => {
               className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
               aria-label="কার্ট বন্ধ করুন"
             >
-              <X className="w-5 h-5" />
+              <X className="w-5 h-5 stroke-[1.8]" />
             </button>
           </div>
 
@@ -47,7 +47,7 @@ export const CartDrawer: React.FC = () => {
             {items.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-center py-12">
                 <div className="w-16 h-16 rounded-full bg-gray-50 border border-gray-100 flex items-center justify-center text-gray-400 mb-3">
-                  <ShoppingBag className="w-8 h-8 text-gray-300" />
+                  <ShoppingCart className="w-8 h-8 stroke-[1.8] text-gray-300" />
                 </div>
                 <p className="text-base font-bold text-gray-800">আপনার ব্যাগটি খালি রয়েছে</p>
                 <p className="text-xs text-gray-500 mt-1 max-w-xs">

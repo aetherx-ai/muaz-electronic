@@ -82,12 +82,12 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
             type="button"
             onClick={handleWishlist}
             className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white border border-gray-100/90 shadow-[0_2px_8px_rgba(0,0,0,0.05)] flex items-center justify-center transition-all duration-150 hover:scale-105 hover:border-emerald-200 ${
-              isWishlisted ? 'text-rose-500' : 'text-gray-400 hover:text-rose-500'
+              isWishlisted ? 'text-[#16A34A]' : 'text-gray-400 hover:text-[#16A34A]'
             }`}
             title="পছন্দের তালিকায় রাখুন"
             aria-label="পছন্দ করুন"
           >
-            <Heart className={`w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[1.8] ${isWishlisted ? 'fill-current text-rose-500' : ''}`} />
+            <Heart className={`w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[1.8] ${isWishlisted ? 'fill-[#16A34A] text-[#16A34A]' : 'text-gray-400'}`} />
           </button>
 
           {/* Share Button */}

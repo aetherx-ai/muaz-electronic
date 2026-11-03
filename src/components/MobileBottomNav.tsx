@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, Layers, Search, ShoppingBag, MessageCircle } from 'lucide-react';
+import { Home, Layers, Search, ShoppingCart, MessageCircle } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { WHATSAPP_INTL } from '../data/products';
 
@@ -61,7 +61,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({ onSearchClick 
           className="relative flex flex-col items-center justify-center py-1 px-2.5 text-gray-500 hover:text-[#16A34A] transition-colors focus-visible:outline-none"
         >
           <div className="relative">
-            <ShoppingBag className="w-5 h-5 stroke-[1.8]" />
+            <ShoppingCart className="w-5 h-5 stroke-[1.8]" />
             {totalItems > 0 && (
               <span className="absolute -top-1 -right-2 bg-[#16A34A] text-white text-[9px] font-bold h-3.5 min-w-[14px] px-0.5 rounded-full flex items-center justify-center">
                 {totalItems}

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import {
   Search,
   User,
-  ShoppingBag,
+  ShoppingCart,
   Menu,
   X,
   MessageCircle,
@@ -41,7 +41,7 @@ export const Header: React.FC<HeaderProps> = ({ onSearchClick, onNavigateToAdmin
               className="flex items-center gap-2.5 shrink-0 focus-visible:outline-none group"
               title={`${STORE_NAME} - হোম`}
             >
-              <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-full bg-black p-0.5 border border-gray-200/80 flex items-center justify-center overflow-hidden shadow-2xs group-hover:scale-105 transition-transform duration-200">
+              <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-full flex items-center justify-center overflow-hidden shadow-2xs group-hover:scale-105 transition-transform duration-200">
                 <img
                   src={OFFICIAL_LOGO_PATH}
                   alt={`${STORE_NAME} Logo`}
@@ -101,7 +101,7 @@ export const Header: React.FC<HeaderProps> = ({ onSearchClick, onNavigateToAdmin
                 <User className="w-5 h-5 stroke-[1.8]" />
               </button>
 
-              {/* 3. Cart Icon with live badge */}
+              {/* 3. Cart Icon with live badge (Standardized ShoppingCart) */}
               <button
                 type="button"
                 onClick={() => setIsCartOpen(true)}
@@ -109,7 +109,7 @@ export const Header: React.FC<HeaderProps> = ({ onSearchClick, onNavigateToAdmin
                 title="শপিং ব্যাগ"
                 aria-label="শপিং ব্যাগ"
               >
-                <ShoppingBag className="w-5 h-5 stroke-[1.8]" />
+                <ShoppingCart className="w-5 h-5 stroke-[1.8]" />
                 {totalItems > 0 && (
                   <span className="absolute top-1 right-1 bg-[#16A34A] text-white text-[10px] font-bold h-[17px] min-w-[17px] px-1 rounded-full flex items-center justify-center shadow-xs animate-in zoom-in-75 duration-150">
                     {totalItems}
@@ -145,7 +145,7 @@ export const Header: React.FC<HeaderProps> = ({ onSearchClick, onNavigateToAdmin
               <div>
                 <div className="p-4 border-b border-gray-100 flex items-center justify-between">
                   <div className="flex items-center gap-2.5">
-                    <div className="h-8 w-8 rounded-full bg-black p-0.5 flex items-center justify-center">
+                    <div className="h-8 w-8 rounded-full flex items-center justify-center overflow-hidden">
                       <img
                         src={OFFICIAL_LOGO_PATH}
                         alt="Logo"
@@ -161,7 +161,7 @@ export const Header: React.FC<HeaderProps> = ({ onSearchClick, onNavigateToAdmin
                     className="p-1.5 text-gray-400 hover:text-gray-900 rounded-lg hover:bg-gray-100 transition-colors"
                     aria-label="মেনু বন্ধ করুন"
                   >
-                    <X className="w-5 h-5" />
+                    <X className="w-5 h-5 stroke-[1.8]" />
                   </button>
                 </div>
 

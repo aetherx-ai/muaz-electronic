@@ -61,7 +61,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
           {/* Brand Header */}
           <div className="p-5 border-b border-gray-100">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-black border border-gray-200 p-0.5 flex items-center justify-center shrink-0">
+              <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 overflow-hidden shadow-2xs">
                 <img
                   src={OFFICIAL_LOGO_PATH}
                   alt={`${STORE_NAME} Logo`}

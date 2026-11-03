@@ -141,7 +141,7 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
                     className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700"
                     aria-label="মুছে ফেলুন"
                   >
-                    <X className="w-3.5 h-3.5" />
+                    <X className="w-3.5 h-3.5 stroke-[1.8]" />
                   </button>
                 )}
               </div>
@@ -157,7 +157,7 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
                   <option value="price-asc">দাম: কম</option>
                   <option value="price-desc">দাম: বেশি</option>
                 </select>
-                <SlidersHorizontal className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" />
+                <SlidersHorizontal className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 stroke-[1.8] pointer-events-none" />
               </div>
             </div>
           </div>

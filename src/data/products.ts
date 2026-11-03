@@ -7,7 +7,7 @@ import neckbandImage from '../assets/images/product_frb_neckband_1792754255689.j
 import x9ConsoleImage from '../assets/images/product_x9_console_1792754256202.jpg';
 import airpodsImage from '../assets/images/product_airpods_black_1792754256092.jpg';
 
-export const OFFICIAL_LOGO_PATH = '/assets/aistudio/image_c39d3d0d.png';
+export const OFFICIAL_LOGO_PATH = '/assets/aistudio/image_55b23943.png';
 export const WHATSAPP_NUMBER = '01822486585';
 export const WHATSAPP_INTL = '8801822486585';
 export const FACEBOOK_URL = 'https://www.facebook.com/share/1KwJp3ZvBy/';

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, ShoppingBag, MessageCircle, ShieldCheck, Check, Truck, AlertCircle } from 'lucide-react';
+import { X, ShoppingCart, MessageCircle, ShieldCheck, Check, Truck, AlertCircle } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { WHATSAPP_INTL } from '../data/products';
 
@@ -195,7 +195,7 @@ export const ProductDetailModal: React.FC = () => {
                     </>
                   ) : (
                     <>
-                      <ShoppingBag className="w-4 h-4" />
+                      <ShoppingCart className="w-4 h-4 stroke-[1.8]" />
                       <span>কার্টে যোগ করুন</span>
                     </>
                   )}

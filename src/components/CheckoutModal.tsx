@@ -118,7 +118,7 @@ export const CheckoutModal: React.FC = () => {
             onClick={handleClose}
             className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
           >
-            <X className="w-5 h-5" />
+            <X className="w-5 h-5 stroke-[1.8]" />
           </button>
         </div>
 

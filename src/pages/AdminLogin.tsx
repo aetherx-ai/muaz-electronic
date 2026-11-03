@@ -98,7 +98,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({
           
           {/* Brand Header */}
           <header className="mb-7 text-center">
-            <div className="mx-auto mb-4 flex h-[68px] w-[68px] items-center justify-center rounded-full border border-gray-200 bg-black p-1 shadow-xs">
+            <div className="mx-auto mb-4 flex h-[68px] w-[68px] items-center justify-center rounded-full overflow-hidden shadow-xs">
               <img
                 src={OFFICIAL_LOGO_PATH}
                 alt={`${STORE_NAME} logo`}

@@ -32,7 +32,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigateToAdmin, categories = 
           {/* Brand Info */}
           <div className="lg:col-span-5 space-y-3">
             <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-full bg-black p-0.5 border border-gray-200 flex items-center justify-center shrink-0">
+              <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 overflow-hidden shadow-2xs">
                 <img
                   src={OFFICIAL_LOGO_PATH}
                   alt={`${STORE_NAME} Logo`}

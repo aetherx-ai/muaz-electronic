@@ -55,7 +55,7 @@ export const BrandTrust: React.FC = () => {
           
           {/* Logo */}
           <div className="shrink-0">
-            <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-black p-0.5 border-2 border-[#16A34A]/30 flex items-center justify-center shadow-xs">
+            <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full flex items-center justify-center shadow-xs overflow-hidden">
               <img
                 src={OFFICIAL_LOGO_PATH}
                 alt={`${STORE_NAME} Logo`}
