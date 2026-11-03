@@ -1,11 +1,33 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
-import path from 'path';
 import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
   return {
-    plugins: [react(), tailwindcss()],
+    plugins: [
+      react(),
+      tailwindcss(),
+      {
+        name: 'serve-static-verification',
+        configureServer(server) {
+          server.middlewares.use((req, res, next) => {
+            const cleanUrl = req.url ? req.url.split('?')[0] : '';
+            if (cleanUrl === '/googlee056a2025a729431.html') {
+              const filePath = path.resolve(__dirname, 'public/googlee056a2025a729431.html');
+              if (fs.existsSync(filePath)) {
+                res.statusCode = 200;
+                res.setHeader('Content-Type', 'text/html; charset=utf-8');
+                res.end(fs.readFileSync(filePath));
+                return;
+              }
+            }
+            next();
+          });
+        },
+      },
+    ],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
