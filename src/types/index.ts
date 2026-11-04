@@ -77,3 +77,33 @@ export interface AdminUser {
   role: string;
   name?: string;
 }
+
+export interface Coupon {
+  id: string;
+  code: string;
+  description?: string;
+  discountType: 'percentage' | 'fixed';
+  discountValue: number;
+  minOrderValue?: number;
+  maxDiscount?: number;
+  startDate: string;
+  endDate: string;
+  usageLimit?: number;
+  usedCount: number;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface ProductReview {
+  id: string;
+  productId: string;
+  productName: string;
+  customerName: string;
+  customerPhone?: string;
+  rating: number; // 1 to 5
+  comment: string;
+  date: string;
+  isVerifiedPurchase: boolean;
+  status: 'published' | 'pending' | 'hidden';
+  adminReply?: string;
+}

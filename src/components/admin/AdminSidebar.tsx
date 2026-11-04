@@ -6,16 +6,17 @@ import {
   ShoppingBag,
   Users,
   Boxes,
+  TicketPercent,
+  Star,
+  BarChart3,
   Settings,
   Store,
   LogOut,
   Database,
   ExternalLink,
   ChevronRight,
-  ShieldCheck,
   PanelLeftClose,
   PanelLeftOpen,
-  Sparkles,
 } from 'lucide-react';
 import { OFFICIAL_LOGO_PATH, STORE_NAME, STORE_TAGLINE } from '../../data/products';
 import { useAuth } from '../../context/AuthContext';
@@ -27,6 +28,9 @@ export type AdminTab =
   | 'orders'
   | 'customers'
   | 'inventory'
+  | 'discounts'
+  | 'reviews'
+  | 'analytics'
   | 'settings';
 
 interface AdminSidebarProps {
@@ -41,6 +45,8 @@ interface AdminSidebarProps {
   pendingOrderCount?: number;
   lowStockCount?: number;
   customerCount?: number;
+  activeCouponsCount?: number;
+  pendingReviewsCount?: number;
   onBackToStore?: () => void;
 }
 
@@ -56,11 +62,13 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
   pendingOrderCount,
   lowStockCount,
   customerCount,
+  activeCouponsCount,
+  pendingReviewsCount,
   onBackToStore,
 }) => {
   const { user, logout, isSupabaseConnected } = useAuth();
 
-  const mainNavItems: {
+  const coreNavItems: {
     id: AdminTab;
     label: string;
     bengaliLabel: string;
@@ -85,7 +93,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
     {
       id: 'products',
       label: 'Products',
-      bengaliLabel: 'প্রোডাক্টস',
+      bengaliLabel: 'প্রোডাক্টস ক্যাটালগ',
       icon: Package,
       badge: productCount,
       badgeStyle: 'neutral',
@@ -93,7 +101,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
     {
       id: 'categories',
       label: 'Categories',
-      bengaliLabel: 'ক্যাটাগরি',
+      bengaliLabel: 'ক্যাটাগরি আর্কিটেকচার',
       icon: Layers,
       badge: categoryCount,
       badgeStyle: 'neutral',
@@ -101,7 +109,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
     {
       id: 'customers',
       label: 'Customers',
-      bengaliLabel: 'গ্রাহক তালিকা',
+      bengaliLabel: 'গ্রাহক ডিরেক্টরি',
       icon: Users,
       badge: customerCount,
       badgeStyle: 'neutral',
@@ -116,7 +124,39 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
     },
   ];
 
-  const secondaryNavItems: {
+  const growthNavItems: {
+    id: AdminTab;
+    label: string;
+    bengaliLabel: string;
+    icon: React.ComponentType<{ className?: string }>;
+    badge?: number;
+    badgeStyle?: 'primary' | 'warning' | 'danger' | 'neutral';
+  }[] = [
+    {
+      id: 'discounts',
+      label: 'Discounts',
+      bengaliLabel: 'ডিসকাউন্ট ও কুপন',
+      icon: TicketPercent,
+      badge: activeCouponsCount,
+      badgeStyle: 'primary',
+    },
+    {
+      id: 'reviews',
+      label: 'Reviews',
+      bengaliLabel: 'রিভিউ ও ফিডব্যাক',
+      icon: Star,
+      badge: pendingReviewsCount,
+      badgeStyle: pendingReviewsCount && pendingReviewsCount > 0 ? 'warning' : 'neutral',
+    },
+    {
+      id: 'analytics',
+      label: 'Analytics',
+      bengaliLabel: 'রিপোর্ট ও অ্যানালিটিক্স',
+      icon: BarChart3,
+    },
+  ];
+
+  const systemNavItems: {
     id: AdminTab;
     label: string;
     bengaliLabel: string;
@@ -135,6 +175,66 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
     setIsOpen(false);
   };
 
+  const renderNavButton = (item: {
+    id: AdminTab;
+    label: string;
+    bengaliLabel: string;
+    icon: React.ComponentType<{ className?: string }>;
+    badge?: number;
+    badgeStyle?: 'primary' | 'warning' | 'danger' | 'neutral';
+  }) => {
+    const isActive = currentTab === item.id;
+    const Icon = item.icon;
+    return (
+      <button
+        key={item.id}
+        onClick={() => handleSelectTab(item.id)}
+        title={isCollapsed ? `${item.bengaliLabel} (${item.label})` : undefined}
+        className={`w-full flex items-center ${
+          isCollapsed ? 'lg:justify-center px-2 py-2.5' : 'justify-between px-3 py-2'
+        } rounded-xl text-xs font-semibold transition-all relative group cursor-pointer ${
+          isActive
+            ? 'bg-slate-900 text-white shadow-xs font-medium'
+            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
+        }`}
+      >
+        <div className="flex items-center gap-2.5 min-w-0">
+          <Icon
+            className={`w-4 h-4 shrink-0 stroke-[1.8] ${
+              isActive ? 'text-emerald-400' : 'text-slate-500 group-hover:text-slate-900'
+            }`}
+          />
+          {!isCollapsed && (
+            <span className="truncate text-left font-sans">{item.bengaliLabel}</span>
+          )}
+        </div>
+
+        {!isCollapsed && item.badge !== undefined && item.badge > 0 && (
+          <span
+            className={`text-[10px] px-1.5 py-0.5 rounded-md font-bold tabular-nums font-mono shrink-0 ml-1.5 ${
+              isActive
+                ? 'bg-white/20 text-white'
+                : item.badgeStyle === 'warning'
+                ? 'bg-amber-100 text-amber-800 border border-amber-200/80'
+                : item.badgeStyle === 'danger'
+                ? 'bg-rose-100 text-rose-800 border border-rose-200/80'
+                : item.badgeStyle === 'primary'
+                ? 'bg-emerald-100 text-emerald-800 border border-emerald-200/80'
+                : 'bg-slate-100 text-slate-700'
+            }`}
+          >
+            {item.badge}
+          </span>
+        )}
+
+        {/* Indicator dot when collapsed */}
+        {isCollapsed && item.badge !== undefined && item.badge > 0 && (
+          <span className="hidden lg:block absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-white" />
+        )}
+      </button>
+    );
+  };
+
   return (
     <>
       {/* Mobile Backdrop */}
@@ -147,7 +247,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
 
       {/* Sidebar container */}
       <aside
-        className={`fixed top-0 bottom-0 left-0 z-50 bg-white border-r border-slate-200/90 flex flex-col justify-between transition-all duration-200 ease-in-out lg:translate-x-0 ${
+        className={`fixed top-0 bottom-0 left-0 z-50 bg-white border-r border-slate-200/80 flex flex-col justify-between transition-all duration-200 ease-in-out lg:translate-x-0 ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
         } ${isCollapsed ? 'lg:w-[76px]' : 'lg:w-[264px]'} w-[264px] shadow-xl lg:shadow-none select-none`}
       >
@@ -169,11 +269,11 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                 <div className="min-w-0 leading-tight">
                   <div className="flex items-center gap-1.5">
                     <span className="text-sm font-extrabold text-slate-900 tracking-tight block font-display">
-                      MUAZ <span className="text-blue-600 font-bold">COMMERCE</span>
+                      MUAZ <span className="text-emerald-600 font-bold">COMMERCE</span>
                     </span>
                   </div>
                   <span className="text-[10px] text-slate-400 font-medium truncate block font-sans">
-                    স্মার্ট বিজনেস ড্যাশবোর্ড
+                    Enterprise Admin OS
                   </span>
                 </div>
               )}
@@ -183,7 +283,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
             {setIsCollapsed && !isCollapsed && (
               <button
                 onClick={() => setIsCollapsed(true)}
-                className="hidden lg:flex p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
+                className="hidden lg:flex p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
                 title="সাইডবার সংকুচিত করুন"
                 aria-label="সাইডবার সংকুচিত করুন"
               >
@@ -197,8 +297,8 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
             <div className="px-3.5 pt-3 pb-1">
               <div className="px-2.5 py-1.5 bg-slate-50/90 border border-slate-200/80 rounded-xl flex items-center justify-between text-[11px]">
                 <div className="flex items-center gap-1.5 text-slate-600 font-medium truncate">
-                  <Database className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                  <span className="truncate">সিস্টেম স্টোরেজ</span>
+                  <Database className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <span className="truncate">ডাটাবেজ সংযোগ</span>
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
@@ -217,66 +317,31 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
             </div>
           )}
 
-          {/* Section: Main Menu */}
+          {/* Section 1: Core Commerce */}
           {!isCollapsed && (
             <div className="px-4 pt-3.5 pb-1">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block font-display">
-                ব্যবস্থাপনা
+                বাণিজ্যিক ব্যবস্থাপনা
               </span>
             </div>
           )}
-
-          {/* Navigation list */}
-          <nav className="px-2.5 py-1 space-y-1">
-            {mainNavItems.map((item) => {
-              const isActive = currentTab === item.id;
-              const Icon = item.icon;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => handleSelectTab(item.id)}
-                  title={isCollapsed ? `${item.bengaliLabel} (${item.label})` : undefined}
-                  className={`w-full flex items-center ${
-                    isCollapsed ? 'lg:justify-center px-2 py-2.5' : 'justify-between px-3 py-2'
-                  } rounded-xl text-xs font-semibold transition-all relative group ${
-                    isActive
-                      ? 'bg-blue-600 text-white shadow-xs font-medium'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <Icon className={`w-4 h-4 shrink-0 stroke-[1.9] ${isActive ? 'text-white' : 'text-slate-500 group-hover:text-slate-900'}`} />
-                    {!isCollapsed && (
-                      <span className="truncate text-left font-sans">{item.bengaliLabel}</span>
-                    )}
-                  </div>
-
-                  {!isCollapsed && item.badge !== undefined && item.badge > 0 && (
-                    <span
-                      className={`text-[10px] px-1.5 py-0.5 rounded-md font-bold tabular-nums font-mono shrink-0 ml-1.5 ${
-                        isActive
-                          ? 'bg-white/20 text-white'
-                          : item.badgeStyle === 'warning'
-                          ? 'bg-amber-100 text-amber-800 border border-amber-200/80'
-                          : item.badgeStyle === 'danger'
-                          ? 'bg-rose-100 text-rose-800 border border-rose-200/80'
-                          : 'bg-slate-100 text-slate-700'
-                      }`}
-                    >
-                      {item.badge}
-                    </span>
-                  )}
-
-                  {/* Dot indicator when collapsed */}
-                  {isCollapsed && item.badge !== undefined && item.badge > 0 && (
-                    <span className="hidden lg:block absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-blue-600 ring-2 ring-white" />
-                  )}
-                </button>
-              );
-            })}
+          <nav className="px-2.5 py-0.5 space-y-1">
+            {coreNavItems.map(renderNavButton)}
           </nav>
 
-          {/* Section: Secondary Menu */}
+          {/* Section 2: Marketing & Growth */}
+          {!isCollapsed && (
+            <div className="px-4 pt-3.5 pb-1">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block font-display">
+                মার্কেটিং ও গ্রোথ
+              </span>
+            </div>
+          )}
+          <nav className="px-2.5 py-0.5 space-y-1">
+            {growthNavItems.map(renderNavButton)}
+          </nav>
+
+          {/* Section 3: Configuration */}
           {!isCollapsed && (
             <div className="px-4 pt-3.5 pb-1">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block font-display">
@@ -284,33 +349,8 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
               </span>
             </div>
           )}
-
-          <nav className="px-2.5 py-1 space-y-1">
-            {secondaryNavItems.map((item) => {
-              const isActive = currentTab === item.id;
-              const Icon = item.icon;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => handleSelectTab(item.id)}
-                  title={isCollapsed ? `${item.bengaliLabel} (${item.label})` : undefined}
-                  className={`w-full flex items-center ${
-                    isCollapsed ? 'lg:justify-center px-2 py-2.5' : 'justify-between px-3 py-2'
-                  } rounded-xl text-xs font-semibold transition-all relative group ${
-                    isActive
-                      ? 'bg-blue-600 text-white shadow-xs font-medium'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <Icon className={`w-4 h-4 shrink-0 stroke-[1.9] ${isActive ? 'text-white' : 'text-slate-500 group-hover:text-slate-900'}`} />
-                    {!isCollapsed && (
-                      <span className="truncate text-left font-sans">{item.bengaliLabel}</span>
-                    )}
-                  </div>
-                </button>
-              );
-            })}
+          <nav className="px-2.5 py-0.5 space-y-1">
+            {systemNavItems.map(renderNavButton)}
           </nav>
 
           {/* Storefront Link */}
@@ -323,7 +363,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
               title={isCollapsed ? 'স্টোরফ্রন্ট দেখুন' : undefined}
               className={`w-full flex items-center ${
                 isCollapsed ? 'lg:justify-center p-2' : 'justify-between px-3 py-2'
-              } rounded-xl text-xs font-semibold text-slate-700 hover:text-blue-600 hover:bg-blue-50/70 border border-slate-200/90 transition-colors`}
+              } rounded-xl text-xs font-semibold text-slate-700 hover:text-emerald-600 hover:bg-emerald-50/70 border border-slate-200/90 transition-colors cursor-pointer`}
             >
               <div className="flex items-center gap-2.5 min-w-0">
                 <Store className="w-4 h-4 text-slate-500 shrink-0" />
@@ -353,14 +393,14 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                     </span>
                   </div>
                 </div>
-                <span className="px-1.5 py-0.5 text-[9px] uppercase font-bold text-blue-700 bg-blue-50 rounded border border-blue-200 shrink-0">
+                <span className="px-1.5 py-0.5 text-[9px] uppercase font-bold text-emerald-700 bg-emerald-50 rounded border border-emerald-200 shrink-0">
                   Admin
                 </span>
               </div>
 
               <button
                 onClick={logout}
-                className="w-full flex items-center justify-center gap-1.5 py-1.5 px-3 text-xs font-semibold text-rose-600 hover:text-white hover:bg-rose-600 rounded-xl border border-rose-200 hover:border-rose-600 transition-colors"
+                className="w-full flex items-center justify-center gap-1.5 py-1.5 px-3 text-xs font-semibold text-rose-600 hover:text-white hover:bg-rose-600 rounded-xl border border-rose-200 hover:border-rose-600 transition-colors cursor-pointer"
               >
                 <LogOut className="w-3.5 h-3.5" />
                 <span>লগআউট</span>
@@ -377,7 +417,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
               <button
                 onClick={logout}
                 title="লগআউট"
-                className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
                 aria-label="লগআউট"
               >
                 <LogOut className="w-4 h-4" />
@@ -389,4 +429,3 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
     </>
   );
 };
-

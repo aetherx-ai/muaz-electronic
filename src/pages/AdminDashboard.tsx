@@ -22,6 +22,9 @@ import { CategoryManagementTab } from '../components/admin/CategoryManagementTab
 import { OrdersTab } from '../components/admin/OrdersTab';
 import { CustomersTab } from '../components/admin/CustomersTab';
 import { InventoryTab } from '../components/admin/InventoryTab';
+import { DiscountsTab } from '../components/admin/DiscountsTab';
+import { ReviewsTab } from '../components/admin/ReviewsTab';
+import { AnalyticsTab } from '../components/admin/AnalyticsTab';
 import { StoreSettingsTab } from '../components/admin/StoreSettingsTab';
 import { ProductFormModal } from '../components/admin/ProductFormModal';
 import { DeleteConfirmModal } from '../components/admin/DeleteConfirmModal';
@@ -99,6 +102,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore })
     const phones = new Set(orders.map((o) => o.phoneNumber.replace(/[\s-]/g, '')));
     return phones.size;
   }, [orders]);
+
+  const activeCouponsCount = useMemo(() => {
+    try {
+      const raw = localStorage.getItem('muaz_admin_coupons_v1');
+      if (raw) {
+        const list = JSON.parse(raw);
+        return Array.isArray(list) ? list.filter((c: any) => c.isActive).length : 3;
+      }
+    } catch {}
+    return 3;
+  }, []);
+
+  const pendingReviewsCount = useMemo(() => {
+    try {
+      const raw = localStorage.getItem('muaz_admin_reviews_v1');
+      if (raw) {
+        const list = JSON.parse(raw);
+        return Array.isArray(list) ? list.filter((r: any) => r.status === 'pending').length : 1;
+      }
+    } catch {}
+    return 1;
+  }, []);
 
   // Handlers for Products
   const handleAddNewProduct = () => {
@@ -337,6 +362,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore })
         pendingOrderCount={pendingOrderCount}
         lowStockCount={lowStockCount}
         customerCount={customerCount}
+        activeCouponsCount={activeCouponsCount}
+        pendingReviewsCount={pendingReviewsCount}
         onBackToStore={onBackToStore}
       />
 
@@ -435,6 +462,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore })
                   products={products}
                   onUpdateStock={handleUpdateStock}
                   onRefreshData={loadAllData}
+                />
+              )}
+
+              {currentTab === 'discounts' && (
+                <DiscountsTab
+                  onRefreshData={loadAllData}
+                />
+              )}
+
+              {currentTab === 'reviews' && (
+                <ReviewsTab
+                  onRefreshData={loadAllData}
+                />
+              )}
+
+              {currentTab === 'analytics' && (
+                <AnalyticsTab
+                  products={products}
+                  orders={orders}
                 />
               )}
 
