@@ -14,8 +14,8 @@ import { MobileBottomNav } from './components/MobileBottomNav';
 import { AdminDashboard } from './pages/AdminDashboard';
 import { AdminLogin } from './pages/AdminLogin';
 import { productService, categoryService } from './lib/supabase';
-import { Product } from './types';
-import { INITIAL_CATEGORIES } from './data/products';
+import { Product, Category } from './types';
+import { INITIAL_DETAILED_CATEGORIES } from './data/products';
 
 // Inner App Content with Route Switching and Auth state
 function MainApp() {
@@ -28,7 +28,7 @@ function MainApp() {
 
   // Storefront Data state
   const [products, setProducts] = useState<Product[]>([]);
-  const [categories, setCategories] = useState<string[]>(INITIAL_CATEGORIES);
+  const [categories, setCategories] = useState<Category[]>(INITIAL_DETAILED_CATEGORIES);
   const [searchQuery, setSearchQuery] = useState('');
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -52,7 +52,7 @@ function MainApp() {
     try {
       const [prods, cats] = await Promise.all([
         productService.getPublicProducts(),
-        categoryService.getCategories(),
+        categoryService.getActiveCategories(),
       ]);
       setProducts(prods);
       setCategories(cats);
@@ -118,10 +118,16 @@ function MainApp() {
   // ROUTE 2: PUBLIC STOREFRONT
   return (
     <div className="min-h-screen bg-[#F7FAF8] text-gray-900 flex flex-col font-sans selection:bg-[#16A34A]/20 selection:text-[#16A34A]">
-      {/* Navigation Top Bar */}
+      {/* Navigation Top Bar with dynamic category navigation */}
       <Header
         onSearchClick={handleSearchClick}
         onNavigateToAdmin={() => navigateTo('/admin')}
+        categories={categories}
+        onSelectCategory={(catName) => {
+          setSearchQuery('');
+          const el = document.getElementById('all-products-section');
+          if (el) el.scrollIntoView({ behavior: 'smooth' });
+        }}
       />
 
       {/* Main Content Areas */}
@@ -132,7 +138,7 @@ function MainApp() {
         {/* Curated Product Discovery Catalog with Live Database Items */}
         <ProductCatalog
           products={products}
-          categories={categories}
+          categories={['All Products', ...categories]}
           searchQuery={searchQuery}
           setSearchQuery={setSearchQuery}
           searchInputRef={searchInputRef}

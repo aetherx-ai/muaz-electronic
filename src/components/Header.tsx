@@ -8,16 +8,27 @@ import {
   MessageCircle,
   ShieldCheck,
   ChevronRight,
+  ChevronDown,
+  Layers,
 } from 'lucide-react';
 import { OFFICIAL_LOGO_PATH, WHATSAPP_INTL, STORE_NAME } from '../data/products';
 import { useCart } from '../context/CartContext';
+import { Category } from '../types';
+import { renderCategoryIcon } from '../lib/categoryIcons';
 
 interface HeaderProps {
   onSearchClick: () => void;
   onNavigateToAdmin?: () => void;
+  categories?: (Category | string)[];
+  onSelectCategory?: (categoryName: string) => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ onSearchClick, onNavigateToAdmin }) => {
+export const Header: React.FC<HeaderProps> = ({
+  onSearchClick,
+  onNavigateToAdmin,
+  categories,
+  onSelectCategory,
+}) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { totalItems, setIsCartOpen } = useCart();
 
@@ -59,17 +70,55 @@ export const Header: React.FC<HeaderProps> = ({ onSearchClick, onNavigateToAdmin
               </div>
             </a>
 
-            {/* CENTER (Desktop only): Navigation links */}
-            <nav className="hidden lg:flex items-center gap-7 text-[13.5px] font-medium text-gray-600">
-              {navLinks.map((link) => (
+            {/* CENTER (Desktop only): Navigation links with Dynamic Categories */}
+            <nav className="hidden lg:flex items-center gap-6 text-[13.5px] font-medium text-gray-600">
+              <a href="#hero" className="hover:text-[#16A34A] transition-colors py-1">হোম</a>
+              <a href="#featured" className="hover:text-[#16A34A] transition-colors py-1">ফিচার্ড পণ্য</a>
+              
+              {/* Dynamic Categories Dropdown */}
+              <div className="relative group">
                 <a
-                  key={link.label}
-                  href={link.href}
-                  className="hover:text-[#16A34A] transition-colors py-1 relative after:content-[''] after:absolute after:bottom-0 after:left-0 after:w-0 hover:after:w-full after:h-[1.5px] after:bg-[#16A34A] after:transition-all after:duration-200"
+                  href="#all-products-section"
+                  className="hover:text-[#16A34A] transition-colors py-1 flex items-center gap-1 cursor-pointer"
                 >
-                  {link.label}
+                  <span>ক্যাটাগরি</span>
+                  <ChevronDown className="w-3.5 h-3.5 transition-transform group-hover:rotate-180" />
                 </a>
-              ))}
+
+                {categories && categories.length > 0 && (
+                  <div className="absolute top-full -left-4 pt-2 w-60 opacity-0 translate-y-1 invisible group-hover:opacity-100 group-hover:translate-y-0 group-hover:visible transition-all duration-200 z-50">
+                    <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-2 space-y-0.5 max-h-80 overflow-y-auto">
+                      {categories.map((c) => {
+                        const name = typeof c === 'string' ? c : c.name;
+                        const icon = typeof c === 'string' ? undefined : c.icon;
+                        const bengali = typeof c === 'string' ? undefined : c.bengaliName;
+                        if (name === 'All Products') return null;
+                        return (
+                          <button
+                            key={name}
+                            type="button"
+                            onClick={() => {
+                              onSelectCategory?.(name);
+                              const el = document.getElementById('all-products-section');
+                              if (el) el.scrollIntoView({ behavior: 'smooth' });
+                            }}
+                            className="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold text-gray-700 hover:text-[#16A34A] hover:bg-[#ECFDF3] flex items-center gap-2.5 transition-colors"
+                          >
+                            <span className="text-[#16A34A]">
+                              {renderCategoryIcon(icon, 'w-4 h-4')}
+                            </span>
+                            <span className="truncate">{bengali || name}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <a href="#products" className="hover:text-[#16A34A] transition-colors py-1">সকল গ্যাজেট</a>
+              <a href="#about" className="hover:text-[#16A34A] transition-colors py-1">আমাদের সম্পর্কে</a>
+              <a href="#contact" className="hover:text-[#16A34A] transition-colors py-1">যোগাযোগ</a>
             </nav>
 
             {/* RIGHT: Mobile & Desktop Action Icons */}
@@ -178,6 +227,41 @@ export const Header: React.FC<HeaderProps> = ({ onSearchClick, onNavigateToAdmin
                       <ChevronRight className="w-4 h-4 text-gray-400" />
                     </a>
                   ))}
+
+                  {/* Dynamic Category Quick Links in Mobile Drawer */}
+                  {categories && categories.length > 0 && (
+                    <div className="pt-2 mt-2 border-t border-gray-100">
+                      <span className="px-3.5 text-[10px] uppercase font-bold tracking-wider text-gray-400 block mb-1.5">
+                        ক্যাটাগরি সমূহ
+                      </span>
+                      <div className="space-y-0.5">
+                        {categories.map((c) => {
+                          const name = typeof c === 'string' ? c : c.name;
+                          const icon = typeof c === 'string' ? undefined : c.icon;
+                          const bengali = typeof c === 'string' ? undefined : c.bengaliName;
+                          if (name === 'All Products') return null;
+                          return (
+                            <button
+                              key={`mob-${name}`}
+                              type="button"
+                              onClick={() => {
+                                setMobileMenuOpen(false);
+                                onSelectCategory?.(name);
+                                const el = document.getElementById('all-products-section');
+                                if (el) el.scrollIntoView({ behavior: 'smooth' });
+                              }}
+                              className="w-full text-left flex items-center gap-2.5 px-3.5 py-2 text-xs font-medium text-gray-700 hover:text-[#16A34A] hover:bg-[#ECFDF3] rounded-xl transition-colors"
+                            >
+                              <span className="text-[#16A34A]">
+                                {renderCategoryIcon(icon, 'w-3.5 h-3.5')}
+                              </span>
+                              <span>{bengali || name}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Admin link */}
                   {onNavigateToAdmin && (

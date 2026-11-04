@@ -1,11 +1,12 @@
 import React, { useState, useMemo } from 'react';
 import { Search, ArrowRight, X, SlidersHorizontal } from 'lucide-react';
 import { ProductCard } from './ProductCard';
-import { Product } from '../types';
+import { Product, Category } from '../types';
+import { renderCategoryIcon } from '../lib/categoryIcons';
 
 interface ProductCatalogProps {
   products: Product[];
-  categories: string[];
+  categories: (string | Category)[];
   searchQuery: string;
   setSearchQuery: (query: string) => void;
   searchInputRef?: React.RefObject<HTMLInputElement | null>;
@@ -34,14 +35,11 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
   // Catalog Products with category filter, search, and sorting
   const filteredProducts = useMemo(() => {
     return products.filter((product) => {
-      // Category match
+      // Dynamic category match
       const matchesCategory =
         selectedCategory === 'All Products' ||
         product.category === selectedCategory ||
-        (selectedCategory === 'Audio & Earbuds' &&
-          (product.category === 'Audio & Earbuds' ||
-            product.category === 'Audio & Microphones' ||
-            product.category === 'Audio & Neckbands'));
+        product.category.toLowerCase() === selectedCategory.toLowerCase();
 
       // Search match
       const query = searchQuery.trim().toLowerCase();
@@ -165,18 +163,24 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
           {/* Clean Rounded Category Chips */}
           <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-3 scrollbar-none mb-5">
             {categories.map((cat) => {
-              const isSelected = selectedCategory === cat;
+              const catName = typeof cat === 'string' ? cat : cat.name;
+              const catBengali = typeof cat === 'string' ? undefined : cat.bengaliName;
+              const catIcon = typeof cat === 'string' ? undefined : cat.icon;
+              const isSelected = selectedCategory === catName;
               return (
                 <button
-                  key={cat}
-                  onClick={() => setSelectedCategory(cat)}
-                  className={`px-3.5 py-1.5 text-xs sm:text-[13px] font-medium rounded-full transition-all duration-150 whitespace-nowrap shrink-0 ${
+                  key={catName}
+                  onClick={() => setSelectedCategory(catName)}
+                  className={`px-3.5 py-1.5 text-xs sm:text-[13px] font-medium rounded-full transition-all duration-150 whitespace-nowrap shrink-0 flex items-center gap-1.5 ${
                     isSelected
                       ? 'bg-[#16A34A] text-white shadow-[0_2px_8px_rgba(22,163,74,0.22)]'
                       : 'bg-white hover:bg-emerald-50/50 text-[#4B5563] border border-gray-200/80 shadow-2xs'
                   }`}
                 >
-                  {cat === 'All Products' ? 'সকল পণ্য' : cat}
+                  {catName !== 'All Products' && catIcon && renderCategoryIcon(catIcon, 'w-3.5 h-3.5')}
+                  <span>
+                    {catName === 'All Products' ? 'সকল পণ্য' : (catBengali || catName)}
+                  </span>
                 </button>
               );
             })}

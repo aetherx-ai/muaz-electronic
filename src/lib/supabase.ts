@@ -1,9 +1,19 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { Product, StoreSettings, AdminUser } from '../types';
+import {
+  Product,
+  StoreSettings,
+  AdminUser,
+  Category,
+  CustomerOrder,
+  OrderStatus,
+  PaymentStatus,
+} from '../types';
 import {
   INITIAL_PRODUCTS,
   INITIAL_CATEGORIES,
+  INITIAL_DETAILED_CATEGORIES,
   DEFAULT_STORE_SETTINGS,
+  INITIAL_ORDERS,
 } from '../data/products';
 
 // -----------------------------------------------------------------------------
@@ -28,6 +38,7 @@ const STORAGE_KEYS = {
   PRODUCTS: 'muaz_db_products_v2',
   CATEGORIES: 'muaz_db_categories_v2',
   SETTINGS: 'muaz_db_settings_v2',
+  ORDERS: 'muaz_db_orders_v2',
   AUTH_SESSION: 'muaz_admin_session_v2',
 };
 
@@ -135,6 +146,28 @@ function saveLocalSettings(settings: StoreSettings): void {
     );
   } catch (error) {
     console.error('Error saving local settings:', error);
+  }
+}
+
+function getLocalOrders(): CustomerOrder[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.ORDERS);
+    if (!raw) {
+      localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(INITIAL_ORDERS));
+      return INITIAL_ORDERS;
+    }
+    return JSON.parse(raw) as CustomerOrder[];
+  } catch (error) {
+    console.error('Error reading local orders:', error);
+    return INITIAL_ORDERS;
+  }
+}
+
+function saveLocalOrders(orders: CustomerOrder[]): void {
+  try {
+    localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
+  } catch (error) {
+    console.error('Error saving local orders:', error);
   }
 }
 
@@ -607,89 +640,294 @@ function isBase64Image(value: string | undefined): boolean {
 }
 
 // -----------------------------------------------------------------------------
-// CATEGORY SERVICE
+// DYNAMIC CATEGORY SERVICE (Permanent Database & Supabase Integration)
 // -----------------------------------------------------------------------------
 export const categoryService = {
-  async getCategories(): Promise<string[]> {
-    if (isSupabaseConfigured && supabase) {
-      const { data, error } = await supabase
-        .from('categories')
-        .select('name')
-        .order('name');
+  // Public active categories (ordered by displayOrder)
+  async getActiveCategories(): Promise<Category[]> {
+    // 1. Try server permanent database
+    try {
+      const res = await fetch('/api/categories');
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          return data;
+        }
+      }
+    } catch {
+      // Fall through to Supabase or local
+    }
 
-      if (!error && data && data.length > 0) {
-        return ['All Products', ...data.map((category) => category.name)];
+    // 2. Try Supabase if configured
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('categories')
+          .select('*')
+          .eq('is_active', true)
+          .order('display_order', { ascending: true });
+
+        if (!error && data && data.length > 0) {
+          return data.map(mapDbCategoryToCategory);
+        }
+      } catch (err) {
+        console.error('Supabase getActiveCategories error:', err);
       }
     }
 
-    return getLocalCategories();
+    return INITIAL_DETAILED_CATEGORIES;
   },
 
-  async addCategory(
-    name: string,
-  ): Promise<{ success: boolean; error: string | null }> {
-    const trimmed = name.trim();
+  // Backward compatible string list: ['All Products', ...active category names]
+  async getCategories(): Promise<string[]> {
+    const active = await this.getActiveCategories();
+    return ['All Products', ...active.map((c) => c.name)];
+  },
 
-    if (!trimmed) {
+  // Admin: Get all categories (including inactive, with product counts)
+  async getAllCategoriesAdmin(): Promise<Category[]> {
+    // 1. Try server permanent database
+    try {
+      const res = await fetch('/api/categories/admin');
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          return data;
+        }
+      }
+    } catch {
+      // Fall through
+    }
+
+    // 2. Try Supabase if configured
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const [catsRes, prodsRes] = await Promise.all([
+          supabase.from('categories').select('*').order('display_order', { ascending: true }),
+          supabase.from('products').select('category'),
+        ]);
+
+        if (!catsRes.error && catsRes.data) {
+          const prods = prodsRes.data || [];
+          return catsRes.data.map((row) => {
+            const cat = mapDbCategoryToCategory(row);
+            cat.productCount = prods.filter((p) => p.category === cat.name).length;
+            return cat;
+          });
+        }
+      } catch (err) {
+        console.error('Supabase getAllCategoriesAdmin error:', err);
+      }
+    }
+
+    return INITIAL_DETAILED_CATEGORIES;
+  },
+
+  // Create new category (simple by name or full payload)
+  async addCategory(
+    categoryInput: string | Partial<Category>
+  ): Promise<{ success: boolean; category?: Category; error: string | null }> {
+    const payload = typeof categoryInput === 'string'
+      ? { name: categoryInput.trim() }
+      : categoryInput;
+
+    const trimmedName = (payload.name || '').trim();
+    if (!trimmedName) {
       return { success: false, error: 'ক্যাটাগরির নাম দিন' };
     }
 
-    if (isSupabaseConfigured && supabase) {
-      const slug = trimmed.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    // 1. Send to server permanent database
+    try {
+      const res = await fetch('/api/categories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
 
-      const { error } = await supabase
-        .from('categories')
-        .insert([{ name: trimmed, slug }]);
+      if (res.ok) {
+        const data = await res.json();
+        // Also sync to Supabase if configured
+        if (isSupabaseConfigured && supabase) {
+          const slug = trimmedName.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+          await supabase.from('categories').upsert([
+            {
+              name: trimmedName,
+              bengali_name: payload.bengaliName || null,
+              slug,
+              icon: payload.icon || 'Layers',
+              image: payload.image || null,
+              description: payload.description || null,
+              is_active: true,
+              display_order: payload.displayOrder || 99,
+            },
+          ]);
+        }
+        return { success: true, category: data.category, error: null };
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        return { success: false, error: errData.error || 'ক্যাটাগরি তৈরি ব্যর্থ হয়েছে' };
+      }
+    } catch {
+      // If server route unavailable, handle Supabase directly
+      if (isSupabaseConfigured && supabase) {
+        const slug = trimmedName.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+        const { data, error } = await supabase
+          .from('categories')
+          .insert([
+            {
+              name: trimmedName,
+              bengali_name: payload.bengaliName || null,
+              slug,
+              icon: payload.icon || 'Layers',
+              image: payload.image || null,
+              description: payload.description || null,
+              is_active: true,
+              display_order: 99,
+            },
+          ])
+          .select()
+          .single();
 
-      if (error) {
-        return { success: false, error: error.message };
+        if (error) {
+          return { success: false, error: error.message };
+        }
+        return { success: true, category: mapDbCategoryToCategory(data), error: null };
       }
 
-      return { success: true, error: null };
+      return { success: false, error: 'সার্ভারে সংযোগ করা সম্ভব হয়নি' };
     }
-
-    const current = getLocalCategories();
-
-    if (current.includes(trimmed)) {
-      return {
-        success: false,
-        error: 'এই ক্যাটাগরি ইতিমধ্যে বিদ্যমান',
-      };
-    }
-
-    saveLocalCategories([...current, trimmed]);
-
-    return { success: true, error: null };
   },
 
-  async deleteCategory(
-    name: string,
-  ): Promise<{ success: boolean; error: string | null }> {
-    if (name === 'All Products') {
-      return {
-        success: false,
-        error: 'ডিফল্ট ক্যাটাগরি ডিলিট করা সম্ভব নয়',
-      };
+  // Edit category (Requirement 8: cascading rename)
+  async updateCategory(
+    id: string,
+    categoryData: Partial<Category>,
+    oldName?: string
+  ): Promise<{ success: boolean; category?: Category; error: string | null }> {
+    try {
+      const res = await fetch(`/api/categories/${encodeURIComponent(id)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(categoryData),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+
+        // Sync to Supabase if configured
+        if (isSupabaseConfigured && supabase) {
+          const dbPayload: Record<string, unknown> = {};
+          if (categoryData.name !== undefined) dbPayload.name = categoryData.name;
+          if (categoryData.bengaliName !== undefined) dbPayload.bengali_name = categoryData.bengaliName;
+          if (categoryData.slug !== undefined) dbPayload.slug = categoryData.slug;
+          if (categoryData.icon !== undefined) dbPayload.icon = categoryData.icon;
+          if (categoryData.image !== undefined) dbPayload.image = categoryData.image;
+          if (categoryData.description !== undefined) dbPayload.description = categoryData.description;
+          if (categoryData.isActive !== undefined) dbPayload.is_active = categoryData.isActive;
+          if (categoryData.displayOrder !== undefined) dbPayload.display_order = categoryData.displayOrder;
+
+          await supabase.from('categories').update(dbPayload).eq('id', id);
+
+          // If renamed, cascade to products in Supabase
+          if (oldName && categoryData.name && oldName !== categoryData.name) {
+            await supabase.from('products').update({ category: categoryData.name }).eq('category', oldName);
+          }
+        }
+
+        return { success: true, category: data.category, error: null };
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        return { success: false, error: errData.error || 'আপডেট ব্যর্থ হয়েছে' };
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'অজানা সমস্যা';
+      return { success: false, error: msg };
     }
+  },
 
-    if (isSupabaseConfigured && supabase) {
-      const { error } = await supabase
-        .from('categories')
-        .delete()
-        .eq('name', name);
+  // Toggle category active/inactive status
+  async toggleCategoryStatus(
+    id: string,
+    isActive: boolean
+  ): Promise<{ success: boolean; error: string | null }> {
+    try {
+      const res = await fetch(`/api/categories/${encodeURIComponent(id)}/toggle`, {
+        method: 'PATCH',
+      });
+      if (res.ok) {
+        if (isSupabaseConfigured && supabase) {
+          await supabase.from('categories').update({ is_active: isActive }).eq('id', id);
+        }
+        return { success: true, error: null };
+      }
+      const errData = await res.json().catch(() => ({}));
+      return { success: false, error: errData.error || 'স্ট্যাটাস পরিবর্তন ব্যর্থ হয়েছে' };
+    } catch {
+      return { success: false, error: 'সার্ভার সমস্যা' };
+    }
+  },
 
-      if (error) {
-        return { success: false, error: error.message };
+  // Reorder categories (drag-and-drop or manual display order)
+  async reorderCategories(
+    orderedIds: string[]
+  ): Promise<{ success: boolean; error: string | null }> {
+    try {
+      const res = await fetch('/api/categories/reorder', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderedIds }),
+      });
+      if (res.ok) {
+        if (isSupabaseConfigured && supabase) {
+          await Promise.all(
+            orderedIds.map((id, index) =>
+              supabase.from('categories').update({ display_order: index + 1 }).eq('id', id)
+            )
+          );
+        }
+        return { success: true, error: null };
+      }
+      return { success: false, error: 'পুনর্বিন্যাস সেভ করা যায়নি' };
+    } catch {
+      return { success: false, error: 'সার্ভার সমস্যা' };
+    }
+  },
+
+  // Delete category with accidental deletion prevention & reassignment
+  async deleteCategory(
+    id: string,
+    reassignToCategoryName?: string
+  ): Promise<{ success: boolean; error: string | null; reassignedCount?: number }> {
+    try {
+      const url = `/api/categories/${encodeURIComponent(id)}${
+        reassignToCategoryName ? `?reassignTo=${encodeURIComponent(reassignToCategoryName)}` : ''
+      }`;
+      const res = await fetch(url, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reassignTo: reassignToCategoryName }),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        if (isSupabaseConfigured && supabase) {
+          if (reassignToCategoryName) {
+            // Reassign products
+            const { data: cat } = await supabase.from('categories').select('name').eq('id', id).single();
+            if (cat?.name) {
+              await supabase.from('products').update({ category: reassignToCategoryName }).eq('category', cat.name);
+            }
+          }
+          await supabase.from('categories').delete().eq('id', id);
+        }
+        return { success: true, error: null, reassignedCount: data.reassignedCount };
       }
 
-      return { success: true, error: null };
+      return { success: false, error: data.error || 'ডিলিট ব্যর্থ হয়েছে' };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'ডিলিট করা যায়নি';
+      return { success: false, error: msg };
     }
-
-    saveLocalCategories(
-      getLocalCategories().filter((category) => category !== name),
-    );
-
-    return { success: true, error: null };
   },
 };
 
@@ -751,6 +989,160 @@ export const settingsService = {
     return { success: true, error: null };
   },
 };
+
+// -----------------------------------------------------------------------------
+// ORDERS SERVICE
+// -----------------------------------------------------------------------------
+export const orderService = {
+  async getAllOrders(): Promise<CustomerOrder[]> {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('orders')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (!error && Array.isArray(data) && data.length > 0) {
+          return data.map(mapDbOrderToOrder);
+        }
+      } catch (err) {
+        console.warn('Supabase orders fetch fallback to persistent store:', err);
+      }
+    }
+
+    return getLocalOrders();
+  },
+
+  async createOrder(
+    payload: Omit<CustomerOrder, 'id' | 'orderNumber' | 'createdAt'> & { orderNumber?: string }
+  ): Promise<{ success: boolean; order?: CustomerOrder; error?: string }> {
+    const orderNumber = payload.orderNumber || `ME-${Date.now().toString().slice(-6)}`;
+    const newOrder: CustomerOrder = {
+      ...payload,
+      id: `ord-${orderNumber.toLowerCase()}`,
+      orderNumber,
+      status: payload.status || 'pending',
+      paymentStatus: payload.paymentStatus || 'cod',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('orders')
+          .insert({
+            id: newOrder.id,
+            order_number: newOrder.orderNumber,
+            customer_name: newOrder.customerName,
+            phone_number: newOrder.phoneNumber,
+            delivery_address: newOrder.deliveryAddress,
+            delivery_area: newOrder.deliveryArea,
+            notes: newOrder.notes,
+            items: newOrder.items,
+            subtotal: newOrder.subtotal,
+            delivery_fee: newOrder.deliveryFee,
+            total: newOrder.total,
+            status: newOrder.status,
+            payment_status: newOrder.paymentStatus,
+            order_date: newOrder.orderDate,
+          })
+          .select()
+          .single();
+
+        if (!error && data) {
+          return { success: true, order: mapDbOrderToOrder(data) };
+        }
+      } catch (err) {
+        console.warn('Supabase order creation fallback:', err);
+      }
+    }
+
+    const currentOrders = getLocalOrders();
+    const updated = [newOrder, ...currentOrders];
+    saveLocalOrders(updated);
+    return { success: true, order: newOrder };
+  },
+
+  async updateOrderStatus(
+    id: string,
+    status: OrderStatus,
+    paymentStatus?: PaymentStatus
+  ): Promise<{ success: boolean; error?: string }> {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const updateData: Record<string, unknown> = {
+          status,
+          updated_at: new Date().toISOString(),
+        };
+        if (paymentStatus) {
+          updateData.payment_status = paymentStatus;
+        }
+        const { error } = await supabase
+          .from('orders')
+          .update(updateData)
+          .eq('id', id);
+
+        if (!error) {
+          return { success: true };
+        }
+      } catch (err) {
+        console.warn('Supabase update order status error:', err);
+      }
+    }
+
+    const currentOrders = getLocalOrders();
+    const index = currentOrders.findIndex((o) => o.id === id || o.orderNumber === id);
+    if (index === -1) {
+      return { success: false, error: 'অর্ডার পাওয়া যায়নি' };
+    }
+    currentOrders[index] = {
+      ...currentOrders[index],
+      status,
+      paymentStatus: paymentStatus || currentOrders[index].paymentStatus || 'cod',
+      updatedAt: new Date().toISOString(),
+    };
+    saveLocalOrders(currentOrders);
+    return { success: true };
+  },
+
+  async deleteOrder(id: string): Promise<{ success: boolean; error?: string }> {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { error } = await supabase.from('orders').delete().eq('id', id);
+        if (!error) return { success: true };
+      } catch (err) {
+        console.warn('Supabase delete order error:', err);
+      }
+    }
+
+    const currentOrders = getLocalOrders();
+    const filtered = currentOrders.filter((o) => o.id !== id && o.orderNumber !== id);
+    saveLocalOrders(filtered);
+    return { success: true };
+  },
+};
+
+function mapDbOrderToOrder(row: any): CustomerOrder {
+  return {
+    id: row.id,
+    orderNumber: row.order_number || row.id,
+    customerName: row.customer_name,
+    phoneNumber: row.phone_number,
+    deliveryAddress: row.delivery_address,
+    deliveryArea: row.delivery_area || 'inside_dhaka',
+    notes: row.notes,
+    items: Array.isArray(row.items) ? row.items : [],
+    subtotal: Number(row.subtotal || 0),
+    deliveryFee: Number(row.delivery_fee || 0),
+    total: Number(row.total || 0),
+    orderDate: row.order_date || row.created_at,
+    status: row.status || 'pending',
+    paymentStatus: row.payment_status || 'cod',
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
 
 // -----------------------------------------------------------------------------
 // DATABASE MAPPING HELPERS
@@ -821,4 +1213,34 @@ function mapPartialProductToDbPayload(
   if (product.specs !== undefined) payload.specs = product.specs;
 
   return payload;
+}
+
+function mapDbCategoryToCategory(row: any): Category {
+  return {
+    id: String(row.id),
+    name: row.name,
+    bengaliName: row.bengali_name || undefined,
+    slug: row.slug,
+    icon: row.icon || 'Layers',
+    image: row.image || undefined,
+    description: row.description || undefined,
+    isActive: row.is_active !== undefined ? Boolean(row.is_active) : true,
+    displayOrder: row.display_order ? Number(row.display_order) : 0,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function mapCategoryToDbPayload(category: Category): Record<string, unknown> {
+  return {
+    id: category.id,
+    name: category.name,
+    bengali_name: category.bengaliName || null,
+    slug: category.slug,
+    icon: category.icon || 'Layers',
+    image: category.image || null,
+    description: category.description || null,
+    is_active: category.isActive,
+    display_order: category.displayOrder,
+  };
 }

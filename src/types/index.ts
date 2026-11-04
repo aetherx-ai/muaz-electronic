@@ -22,8 +22,16 @@ export interface Product {
 export interface Category {
   id: string;
   name: string;
+  bengaliName?: string;
   slug: string;
   icon?: string;
+  image?: string;
+  description?: string;
+  isActive: boolean;
+  displayOrder: number;
+  productCount?: number;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface StoreSettings {
@@ -41,7 +49,11 @@ export interface CartItem {
   quantity: number;
 }
 
+export type OrderStatus = 'pending' | 'confirmed' | 'shipped' | 'delivered' | 'cancelled';
+export type PaymentStatus = 'cod' | 'paid' | 'pending';
+
 export interface CustomerOrder {
+  id?: string;
   customerName: string;
   phoneNumber: string;
   deliveryAddress: string;
@@ -53,6 +65,10 @@ export interface CustomerOrder {
   total: number;
   orderDate: string;
   orderNumber: string;
+  status?: OrderStatus;
+  paymentStatus?: PaymentStatus;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface AdminUser {

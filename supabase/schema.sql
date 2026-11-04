@@ -5,11 +5,17 @@
 
 -- 1. Create categories table
 CREATE TABLE IF NOT EXISTS public.categories (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
     name TEXT NOT NULL UNIQUE,
+    bengali_name TEXT,
     slug TEXT NOT NULL UNIQUE,
     icon TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
+    image TEXT,
+    description TEXT,
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    display_order INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
 );
 
 -- 2. Create products table
@@ -137,14 +143,17 @@ VALUES ('default', 'MUAZ ELECTRONIC', 'Smart Gadgets • Better Life', '01822486
 ON CONFLICT (id) DO NOTHING;
 
 -- 10. Insert Default Categories
-INSERT INTO public.categories (name, slug) VALUES
-('Audio & Earbuds', 'audio-earbuds'),
-('Power Banks', 'power-banks'),
-('Mobile Accessories', 'mobile-accessories'),
-('Gaming Gadgets', 'gaming-gadgets'),
-('Audio & Microphones', 'audio-microphones'),
-('Audio & Neckbands', 'audio-neckbands')
-ON CONFLICT (name) DO NOTHING;
+INSERT INTO public.categories (name, bengali_name, slug, icon, is_active, display_order, description) VALUES
+('Audio & Earbuds', 'অডিও ও ইয়ারবাডস', 'audio-earbuds', 'Headphones', true, 1, 'প্রিমিয়াম কোয়ালিটির ট্রু ওয়্যারলেস স্টেরিও (TWS) এয়ারবাডস ও হেডফোন কালেকশন'),
+('Power Banks', 'পাওয়ার ব্যাংকস', 'power-banks', 'BatteryCharging', true, 2, 'দ্রুত চার্জিং সক্ষমতার হাই-ক্যাপাসিটি পাওয়ার ব্যাংক'),
+('Mobile Accessories', 'মোবাইল এক্সেসরিজ', 'mobile-accessories', 'Smartphone', true, 3, 'ফোন কুলার, স্ট্যান্ড, গ্যাজেট এক্সেসরিজ ও প্রয়োজনীয় সামগ্রী'),
+('Gaming Gadgets', 'গেমিং গ্যাজেটস', 'gaming-gadgets', 'Gamepad2', true, 4, 'পোর্টেবল কনসোল, গেমিং ট্রিগার ও এক্সেসরিজ'),
+('Audio & Microphones', 'অডিও ও মাইক্রোফোন', 'audio-microphones', 'Mic', true, 5, 'ওয়্যারলেস ল্যাপেল মাইক্রোফোন ও স্ট্রিমিং অডিও সরঞ্জাম'),
+('Audio & Neckbands', 'অডিও ও নেকব্যান্ড', 'audio-neckbands', 'Radio', true, 6, 'স্পোর্টস ব্লুটুথ নেকব্যান্ড ও ওয়্যারলেস ইয়ারফোন')
+ON CONFLICT (name) DO UPDATE SET
+  bengali_name = EXCLUDED.bengali_name,
+  icon = EXCLUDED.icon,
+  display_order = EXCLUDED.display_order;
 
 -- 11. Trigger for updating updated_at timestamp
 CREATE OR REPLACE FUNCTION public.handle_updated_at()

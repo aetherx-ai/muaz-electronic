@@ -1,0 +1,196 @@
+{
+  "categories": [
+    {
+      "id": "cat-audio-earbuds",
+      "name": "Audio & Earbuds",
+      "bengaliName": "অডিও ও ইয়ারবাডস",
+      "slug": "audio-earbuds",
+      "icon": "Headphones",
+      "isActive": true,
+      "displayOrder": 1,
+      "description": "প্রিমিয়াম কোয়ালিটির ট্রু ওয়্যারলেস স্টেরিও (TWS) এয়ারবাডস ও হেডফোন কালেকশন",
+      "createdAt": "2026-11-04T08:32:18.605Z",
+      "updatedAt": "2026-11-04T08:32:18.605Z"
+    },
+    {
+      "id": "cat-power-banks",
+      "name": "Power Banks",
+      "bengaliName": "পাওয়ার ব্যাংকস",
+      "slug": "power-banks",
+      "icon": "BatteryCharging",
+      "isActive": true,
+      "displayOrder": 2,
+      "description": "দ্রুত চার্জিং সক্ষমতার হাই-ক্যাপাসিটি পাওয়ার ব্যাংক",
+      "createdAt": "2026-11-04T08:32:18.605Z",
+      "updatedAt": "2026-11-04T08:32:18.605Z"
+    },
+    {
+      "id": "cat-mobile-accessories",
+      "name": "Mobile Accessories",
+      "bengaliName": "মোবাইল এক্সেসরিজ",
+      "slug": "mobile-accessories",
+      "icon": "Smartphone",
+      "isActive": true,
+      "displayOrder": 3,
+      "description": "ফোন কুলার, স্ট্যান্ড, গ্যাজেট এক্সেসরিজ ও প্রয়োজনীয় সামগ্রী",
+      "createdAt": "2026-11-04T08:32:18.605Z",
+      "updatedAt": "2026-11-04T08:32:18.605Z"
+    },
+    {
+      "id": "cat-gaming-gadgets",
+      "name": "Gaming Gadgets",
+      "bengaliName": "গেমিং গ্যাজেটস",
+      "slug": "gaming-gadgets",
+      "icon": "Gamepad2",
+      "isActive": true,
+      "displayOrder": 4,
+      "description": "পোর্টেবল কনসোল, গেমিং ট্রিগার ও এক্সেসরিজ",
+      "createdAt": "2026-11-04T08:32:18.605Z",
+      "updatedAt": "2026-11-04T08:32:18.605Z"
+    },
+    {
+      "id": "cat-audio-microphones",
+      "name": "Audio & Microphones",
+      "bengaliName": "অডিও ও মাইক্রোফোন",
+      "slug": "audio-microphones",
+      "icon": "Mic",
+      "isActive": true,
+      "displayOrder": 5,
+      "description": "ওয়্যারলেস ল্যাপেল মাইক্রোফোন ও স্ট্রিমিং অডিও সরঞ্জাম",
+      "createdAt": "2026-11-04T08:32:18.605Z",
+      "updatedAt": "2026-11-04T08:32:18.605Z"
+    },
+    {
+      "id": "cat-audio-neckbands",
+      "name": "Audio & Neckbands",
+      "bengaliName": "অডিও ও নেকব্যান্ড",
+      "slug": "audio-neckbands",
+      "icon": "Radio",
+      "isActive": true,
+      "displayOrder": 6,
+      "description": "স্পোর্টস ব্লুটুথ নেকব্যান্ড ও ওয়্যারলেস ইয়ারফোন",
+      "createdAt": "2026-11-04T08:32:18.605Z",
+      "updatedAt": "2026-11-04T08:34:09.121Z"
+    }
+  ],
+  "products": [
+    {
+      "id": "hoco-ga6-cooler",
+      "name": "Hoco GA6 Glacier AI Semiconductor Mobile Cooler",
+      "bengaliName": "হোকো GA6 সেমিকন্ডাক্টর মোবাইল ফোন কুলার",
+      "price": 1500,
+      "salePrice": 1150,
+      "category": "Mobile Accessories",
+      "brand": "Hoco",
+      "stock": 133,
+      "status": "published",
+      "isFeatured": true,
+      "image": "/src/assets/images/product_hoco_cooler_1792754252903.jpg",
+      "description": "উচ্চক্ষমতাসম্পন্ন সেমিকন্ডাক্টর রেফ্রিজারেশন প্রযুক্তিসম্পন্ন মোবাইল ফোন কুলিং ফ্যান।",
+      "features": [
+        "সেমিকন্ডাক্টর ইনস্ট্যান্ট কুলিং অ্যালয় প্লেট",
+        "নীরব কিন্তু শক্তিশালী টার্বো ফ্যান মোটর"
+      ]
+    },
+    {
+      "id": "hollyland-lark-m2",
+      "name": "Hollyland Lark M2 1:1 MasterCopy Wireless Microphone",
+      "bengaliName": "হলিভ্যান্ড লার্ক এম২ ১:১ মাস্টারকপি মাইক্রোফোন",
+      "price": 1800,
+      "salePrice": 1400,
+      "category": "Audio & Microphones",
+      "brand": "MasterCopy",
+      "stock": 75,
+      "status": "published",
+      "isFeatured": true,
+      "image": "/src/assets/images/product_hollyland_mic_1792754254527.jpg",
+      "description": "কনটেন্ট ক্রিয়েটরদের জন্য আল্ট্রা-লাইটওয়েট বাটন সাইজ ওয়্যারলেস মাইক্রোফোন।",
+      "features": [
+        "আল্ট্রা-কমপ্যাক্ট বাটন সাইজ ৯ গ্রাম ওজন",
+        "হাই-ফিডেলিটি নয়েজ ক্যান্সেলেশন"
+      ]
+    },
+    {
+      "id": "vendens-10000mah-powerbank",
+      "name": "VEN-DENS 10000mAh 22.5W Fast Charging Power Bank",
+      "bengaliName": "ভেন-ডেনস ১০,০০০ এমএএইচ ফাস্ট চার্জিং পাওয়ার ব্যাংক",
+      "price": 1300,
+      "salePrice": 950,
+      "category": "Power Banks",
+      "brand": "VEN-DENS",
+      "stock": 58,
+      "status": "published",
+      "isFeatured": true,
+      "image": "/src/assets/images/product_vendens_powerbank_1792754254403.jpg",
+      "description": "২২.৫ ওয়াট সুপার ফাস্ট চার্জিং সমর্থিত কমপ্যাক্ট পাওয়ার ব্যাংক।",
+      "features": [
+        "২২.৫ ওয়াট পিডি ও কিউসি ফাস্ট চার্জিং সাপোর্ট",
+        "ডুয়াল ইনপুট ও ট্রিপল আউটপুট পোর্ট"
+      ]
+    },
+    {
+      "id": "frb-wireless-neckband-pro",
+      "name": "FRB Signature Wireless Sports Neckband",
+      "bengaliName": "এফআরবি সিগনেচার ওয়্যারলেস স্পোর্টস নেকব্যান্ড",
+      "price": 900,
+      "salePrice": 650,
+      "category": "Audio & Neckbands",
+      "brand": "FRB",
+      "stock": 110,
+      "status": "published",
+      "isFeatured": false,
+      "image": "/src/assets/images/product_frb_neckband_1792754255689.jpg",
+      "description": "সারাদিন স্বাচ্ছন্দ্যে গান শোনার জন্য ডিজাইনকৃত ম্যাগনেটিক ব্লুটুথ নেকব্যান্ড।",
+      "features": [
+        "হাই-রেজোলিউশন ডিপ বাস ড্রাইভার",
+        "ম্যাগনেটিক ইয়ারবাড লক সিস্টেম"
+      ],
+      "updatedAt": "2026-11-04T08:34:09.121Z"
+    },
+    {
+      "id": "retro-x9-game-console-500in1",
+      "name": "Retro Handheld Video Game Console 500-in-1",
+      "bengaliName": "রেট্রো পোর্টেবল ভিডিও গেম কনসোল ৫০০ ইন ১",
+      "price": 1100,
+      "salePrice": 800,
+      "category": "Gaming Gadgets",
+      "brand": "RetroPlay",
+      "stock": 45,
+      "status": "published",
+      "isFeatured": false,
+      "image": "/src/assets/images/product_x9_console_1792754256202.jpg",
+      "description": "ক্লাসিক নস্টালজিক গেমের সমৃদ্ধ লাইব্রেরিসহ পোর্টেবল হ্যান্ডহেল্ড গেমিং কনসোল।",
+      "features": [
+        "৫০০টি ক্লাসিক রেট্রো গেম প্রি-ইনস্টল্ড",
+        "টিভি-আউট কেবল সাপোর্ট"
+      ]
+    },
+    {
+      "id": "apple-airpods-black-mastercopy",
+      "name": "Apple AirPods Matte Black Edition MasterCopy TWS",
+      "bengaliName": "অ্যাপল এয়ারপডস ব্ল্যাক স্পেশাল এডিশন মাস্টারকপি",
+      "price": 1200,
+      "salePrice": 850,
+      "category": "Audio & Earbuds",
+      "brand": "MasterCopy",
+      "stock": 90,
+      "status": "published",
+      "isFeatured": false,
+      "image": "/src/assets/images/product_airpods_black_1792754256092.jpg",
+      "description": "প্রিমিয়াম ম্যাট ব্ল্যাক ফিনিশের স্পেশাল এডিশন ওয়্যারলেস এয়ারপডস মাস্টারকপি।",
+      "features": [
+        "এক্সক্লুসিভ স্টেলথ ম্যাট ব্ল্যাক ফিনিশ",
+        "স্মার্ট টাচ কন্ট্রোল"
+      ]
+    }
+  ],
+  "settings": {
+    "storeName": "MUAZ ELECTRONIC",
+    "tagline": "Smart Gadgets • Better Life",
+    "whatsappNumber": "01822486585",
+    "whatsappIntl": "8801822486585",
+    "facebookUrl": "https://www.facebook.com/share/1KwJp3ZvBy/",
+    "deliveryFeeInsideDhaka": 70,
+    "deliveryFeeOutsideDhaka": 130
+  }
+}

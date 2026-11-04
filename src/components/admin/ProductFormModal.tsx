@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Upload, Plus, Trash2, Image as ImageIcon, CheckCircle, AlertCircle } from 'lucide-react';
-import { Product, ProductStatus } from '../../types';
+import { X, Upload, Plus, Trash2, Image as ImageIcon, CheckCircle, AlertCircle, Sparkles } from 'lucide-react';
+import { Product, ProductStatus, Category } from '../../types';
 
 interface ProductFormModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (productData: Omit<Product, 'id'>, imageFile?: File, productId?: string) => Promise<{ success: boolean; error: string | null }>;
   productToEdit?: Product | null;
-  categories: string[];
+  categories: (string | Category)[];
+  onAddCategory?: (categoryData: Partial<Category> | string) => Promise<{ success: boolean; category?: Category; error: string | null }>;
 }
 
 export const ProductFormModal: React.FC<ProductFormModalProps> = ({
@@ -16,6 +17,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
   onSave,
   productToEdit,
   categories,
+  onAddCategory,
 }) => {
   const [name, setName] = useState('');
   const [bengaliName, setBengaliName] = useState('');
@@ -42,6 +44,13 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Inline category creation state
+  const [isInlineCategoryOpen, setIsInlineCategoryOpen] = useState(false);
+  const [inlineCatName, setInlineCatName] = useState('');
+  const [inlineCatBengali, setInlineCatBengali] = useState('');
+  const [isCreatingCategory, setIsCreatingCategory] = useState(false);
+  const [inlineCatError, setInlineCatError] = useState<string | null>(null);
+
   useEffect(() => {
     if (productToEdit) {
       setName(productToEdit.name);
@@ -65,7 +74,9 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
       setBengaliName('');
       setPrice('');
       setSalePrice('');
-      setCategory(categories[1] || 'Mobile Accessories');
+      const catNames = categories.map((c) => (typeof c === 'string' ? c : c.name)).filter((c) => c !== 'All Products');
+      const firstAvailableCat = catNames[0] || '';
+      setCategory(firstAvailableCat);
       setBrand('MUAZ ELECTRONIC');
       setStock(20);
       setStatus('published');
@@ -271,9 +282,110 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-semibold text-[#FAFAFA] mb-1.5">
-                  ক্যাটাগরি *
-                </label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-semibold text-[#FAFAFA]">
+                    ক্যাটাগরি *
+                  </label>
+                  {onAddCategory && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsInlineCategoryOpen(!isInlineCategoryOpen);
+                        setInlineCatError(null);
+                      }}
+                      className="text-[11px] font-bold text-[#FFC928] hover:text-[#F7D77B] flex items-center gap-1 transition-colors"
+                      title="নতুন ক্যাটাগরি তৈরি করুন"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>{isInlineCategoryOpen ? 'বাতিল' : '+ নতুন ক্যাটাগরি যোগ করুন'}</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Inline Category Quick Creation Box */}
+                {isInlineCategoryOpen && (
+                  <div className="mb-3 p-3 bg-[#171717] border border-[#FFC928]/40 rounded-xl space-y-2.5 animate-in fade-in duration-150 shadow-lg">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-[#FFC928] flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>কাস্টম ক্যাটাগরি তৈরি ও নির্বাচন</span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setIsInlineCategoryOpen(false)}
+                        className="text-gray-400 hover:text-white text-xs p-1"
+                        aria-label="বন্ধ করুন"
+                      >
+                        ✕
+                      </button>
+                    </div>
+
+                    {inlineCatError && (
+                      <p className="text-[11px] text-rose-400 bg-rose-500/10 p-1.5 rounded-lg border border-rose-500/30">
+                        {inlineCatError}
+                      </p>
+                    )}
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <input
+                        type="text"
+                        value={inlineCatName}
+                        onChange={(e) => setInlineCatName(e.target.value)}
+                        placeholder="ক্যাটাগরির নাম (English, e.g. Smart Watches) *"
+                        className="w-full px-3 py-2 text-xs bg-[#111111] border border-[#292929] rounded-lg text-[#FAFAFA] placeholder-[#A7A7A7]/50 focus:outline-none focus:border-[#FFC928]"
+                      />
+                      <input
+                        type="text"
+                        value={inlineCatBengali}
+                        onChange={(e) => setInlineCatBengali(e.target.value)}
+                        placeholder="বাংলা নাম (যেমন: স্মার্ট ওয়াচ ও ব্যান্ড)"
+                        className="w-full px-3 py-2 text-xs bg-[#111111] border border-[#292929] rounded-lg text-[#FAFAFA] placeholder-[#A7A7A7]/50 focus:outline-none focus:border-[#FFC928]"
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-end gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setIsInlineCategoryOpen(false)}
+                        className="px-2.5 py-1 text-xs text-gray-400 hover:text-white"
+                      >
+                        বাতিল
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (!inlineCatName.trim()) {
+                            setInlineCatError('ক্যাটাগরির নাম দিন');
+                            return;
+                          }
+                          if (!onAddCategory) return;
+                          setIsCreatingCategory(true);
+                          setInlineCatError(null);
+                          const res = await onAddCategory({
+                            name: inlineCatName.trim(),
+                            bengaliName: inlineCatBengali.trim() || undefined,
+                            icon: 'Layers',
+                            isActive: true,
+                          });
+                          setIsCreatingCategory(false);
+                          if (res.success && res.category) {
+                            setCategory(res.category.name);
+                            setInlineCatName('');
+                            setInlineCatBengali('');
+                            setIsInlineCategoryOpen(false);
+                          } else {
+                            setInlineCatError(res.error || 'ক্যাটাগরি তৈরি ব্যর্থ হয়েছে');
+                          }
+                        }}
+                        disabled={isCreatingCategory || !inlineCatName.trim()}
+                        className="px-3 py-1.5 text-xs font-bold text-black bg-[#FFC928] hover:bg-[#F7D77B] rounded-lg disabled:opacity-50 transition-all flex items-center gap-1 shadow-sm"
+                      >
+                        {isCreatingCategory ? 'তৈরি হচ্ছে...' : 'তৈরি ও নির্বাচন করুন'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 <select
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
@@ -281,17 +393,23 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                     errors.category ? 'border-rose-500' : 'border-[#292929] focus:border-[#FFC928]'
                   }`}
                 >
-                  {categories.filter((c) => c !== 'All Products').map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                  <option value="Audio & Earbuds">Audio & Earbuds</option>
-                  <option value="Power Banks">Power Banks</option>
-                  <option value="Mobile Accessories">Mobile Accessories</option>
-                  <option value="Gaming Gadgets">Gaming Gadgets</option>
-                  <option value="Audio & Microphones">Audio & Microphones</option>
-                  <option value="Audio & Neckbands">Audio & Neckbands</option>
+                  {Array.from(
+                    new Set([
+                      ...categories
+                        .map((c) => (typeof c === 'string' ? c : c.name))
+                        .filter((c) => c !== 'All Products'),
+                      ...(category ? [category] : []),
+                    ])
+                  ).map((catName) => {
+                    const matchedCat = categories.find(
+                      (c) => typeof c !== 'string' && c.name === catName
+                    ) as Category | undefined;
+                    return (
+                      <option key={catName} value={catName}>
+                        {catName} {matchedCat?.bengaliName ? `(${matchedCat.bengaliName})` : ''}
+                      </option>
+                    );
+                  })}
                 </select>
                 {errors.category && <p className="text-[11px] text-rose-400 mt-1">{errors.category}</p>}
               </div>

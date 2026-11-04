@@ -9,10 +9,11 @@ import {
   FACEBOOK_URL,
   INITIAL_CATEGORIES,
 } from '../data/products';
+import { Category } from '../types';
 
 interface FooterProps {
   onNavigateToAdmin?: () => void;
-  categories?: string[];
+  categories?: (string | Category)[];
 }
 
 export const Footer: React.FC<FooterProps> = ({ onNavigateToAdmin, categories = INITIAL_CATEGORIES }) => {
@@ -123,13 +124,19 @@ export const Footer: React.FC<FooterProps> = ({ onNavigateToAdmin, categories = 
               ক্যাটাগরি
             </h4>
             <ul className="space-y-1.5 text-xs">
-              {categories.filter((c) => c !== 'All Products').map((cat) => (
-                <li key={cat}>
-                  <a href="#products" className="hover:text-[#16A34A] transition-colors">
-                    {cat}
-                  </a>
-                </li>
-              ))}
+              {categories
+                .filter((c) => (typeof c === 'string' ? c : c.name) !== 'All Products')
+                .map((cat) => {
+                  const name = typeof cat === 'string' ? cat : cat.name;
+                  const bengali = typeof cat === 'string' ? undefined : cat.bengaliName;
+                  return (
+                    <li key={name}>
+                      <a href="#all-products-section" className="hover:text-[#16A34A] transition-colors">
+                        {bengali || name}
+                      </a>
+                    </li>
+                  );
+                })}
             </ul>
           </div>
 

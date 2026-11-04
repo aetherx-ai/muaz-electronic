@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X, CheckCircle2, MessageCircle, AlertCircle, ShieldCheck, MapPin, Phone, User, FileText } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { WHATSAPP_INTL, WHATSAPP_NUMBER } from '../data/products';
+import { orderService } from '../lib/supabase';
 
 export const CheckoutModal: React.FC = () => {
   const { isCheckoutOpen, setIsCheckoutOpen, items, subtotal, clearCart } = useCart();
@@ -53,6 +54,7 @@ export const CheckoutModal: React.FC = () => {
     e.preventDefault();
     if (!validate()) return;
 
+    const cleanPhone = phoneNumber.trim().replace(/[\s-]/g, '');
     const orderId = `ME-${Date.now().toString().slice(-6)}`;
     const areaName = deliveryArea === 'inside_dhaka' ? 'ঢাকা সিটির ভেতরে (৳৭০)' : 'ঢাকার বাইরে (৳১৩০)';
 
@@ -86,6 +88,23 @@ export const CheckoutModal: React.FC = () => {
     setWhatsappUrl(targetUrl);
     setGeneratedOrderNumber(orderId);
     setOrderConfirmed(true);
+
+    // Save to persistent database / orderService
+    orderService.createOrder({
+      orderNumber: orderId,
+      customerName: customerName.trim(),
+      phoneNumber: cleanPhone,
+      deliveryAddress: deliveryAddress.trim(),
+      deliveryArea,
+      notes: notes.trim() || undefined,
+      items: [...items],
+      subtotal,
+      deliveryFee,
+      total: grandTotal,
+      orderDate: new Date().toISOString(),
+      status: 'pending',
+      paymentStatus: 'cod',
+    }).catch((err) => console.error('Order save error:', err));
 
     window.open(targetUrl, '_blank');
     clearCart();
