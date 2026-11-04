@@ -343,7 +343,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore })
       {/* Main Content Area (dynamic left padding based on sidebar collapsed state) */}
       <div
         className={`flex-1 flex flex-col min-w-0 transition-all duration-200 ease-in-out ${
-          isSidebarCollapsed ? 'lg:pl-[72px]' : 'lg:pl-[260px]'
+          isSidebarCollapsed ? 'lg:pl-[76px]' : 'lg:pl-[264px]'
         }`}
       >
         
@@ -358,6 +358,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore })
           isLoading={loading}
           onAddNewProduct={handleAddNewProduct}
           onBackToStore={onBackToStore}
+          products={products}
+          orders={orders}
+          onSelectProduct={(p) => {
+            handleEditProduct(p);
+          }}
+          onSelectOrder={(_o) => {
+            setCurrentTab('orders');
+          }}
         />
 
         {/* Tab Content */}
@@ -376,7 +384,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore })
                   onAddNewProduct={handleAddNewProduct}
                   onEditProduct={handleEditProduct}
                   onViewAllProducts={() => setCurrentTab('products')}
-                  onViewAllOrders={() => setCurrentTab('orders')}
+                  onViewAllOrders={(_filter) => setCurrentTab('orders')}
                   onViewAllCategories={() => setCurrentTab('categories')}
                   onUpdateOrderStatus={handleUpdateOrderStatus}
                 />
