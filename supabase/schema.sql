@@ -84,6 +84,10 @@ TO authenticated
 USING (true);
 
 -- 6. Categories RLS Policies
+DROP POLICY IF EXISTS "Public read categories" ON public.categories;
+DROP POLICY IF EXISTS "Admins manage categories" ON public.categories;
+DROP POLICY IF EXISTS "Anon manage categories" ON public.categories;
+
 CREATE POLICY "Public read categories" 
 ON public.categories 
 FOR SELECT 
@@ -93,6 +97,14 @@ CREATE POLICY "Admins manage categories"
 ON public.categories 
 FOR ALL 
 TO authenticated 
+USING (true)
+WITH CHECK (true);
+
+-- Also allow anon role so category operations work seamlessly with the Supabase public anon key
+CREATE POLICY "Anon manage categories" 
+ON public.categories 
+FOR ALL 
+TO anon 
 USING (true)
 WITH CHECK (true);
 

@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { Category, Product } from '../../types';
 import { renderCategoryIcon } from '../../lib/categoryIcons';
+import { generateCategorySlug } from '../../lib/supabase';
 import { CategoryFormModal } from './CategoryFormModal';
 import { CategoryDeleteModal } from './CategoryDeleteModal';
 
@@ -105,17 +106,12 @@ export const CategoryManagementTab: React.FC<CategoryManagementTabProps> = ({
     if (!quickName.trim()) return;
 
     setIsQuickSubmitting(true);
-    const slug = quickName
-      .toLowerCase()
-      .trim()
-      .replace(/[^\w\s-]/g, '')
-      .replace(/[\s_-]+/g, '-')
-      .replace(/^-+|-+$/g, '');
+    const slug = generateCategorySlug(quickName.trim());
 
     const newCategory: Partial<Category> = {
       name: quickName.trim(),
       bengaliName: quickBengaliName.trim() || undefined,
-      slug: slug || `cat-${Date.now()}`,
+      slug,
       isActive: true,
       displayOrder: categories.length + 1,
       icon: 'Layers',
