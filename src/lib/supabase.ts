@@ -781,7 +781,11 @@ export const categoryService = {
       return { success: false, error: 'ক্যাটাগরির নাম (English) দেওয়া আবশ্যক' };
     }
 
-    const newId = payload.id || `cat-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const newId = (payload.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(payload.id))
+      ? payload.id
+      : (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+          ? crypto.randomUUID()
+          : (payload.id || `cat-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`));
     const slug = (payload.slug && payload.slug.trim())
       ? payload.slug.trim()
       : generateCategorySlug(rawName, newId);
@@ -819,7 +823,7 @@ export const categoryService = {
           };
         }
 
-        const dbPayload = {
+        const dbPayload: Record<string, unknown> = {
           id: newId,
           name: rawName,
           bengali_name: bengaliName || null,
@@ -848,6 +852,21 @@ export const categoryService = {
             .single();
           data = retryRes.data;
           error = retryRes.error;
+        }
+
+        // Schema cache fallback if remote PostgREST cache has not yet refreshed bengali_name
+        if (error && error.message && error.message.includes('bengali_name')) {
+          console.warn('[Supabase Category] PostgREST schema cache note for bengali_name, retrying insert:', error.message);
+          const { bengali_name: _b, ...fallbackPayload } = dbPayload;
+          const retryRes = await supabase
+            .from('categories')
+            .insert([fallbackPayload])
+            .select()
+            .single();
+          if (!retryRes.error && retryRes.data) {
+            data = retryRes.data;
+            error = null;
+          }
         }
 
         if (error) {
@@ -950,12 +969,27 @@ export const categoryService = {
         if (categoryData.isActive !== undefined) dbPayload.is_active = categoryData.isActive;
         if (categoryData.displayOrder !== undefined) dbPayload.display_order = categoryData.displayOrder;
 
-        const { data, error } = await supabase
+        let { data, error } = await supabase
           .from('categories')
           .update(dbPayload)
           .eq('id', id)
           .select()
           .single();
+
+        if (error && error.message && error.message.includes('bengali_name')) {
+          console.warn('[Supabase Category Update] PostgREST schema cache note for bengali_name, retrying update:', error.message);
+          const { bengali_name: _b, ...fallbackPayload } = dbPayload;
+          const retryRes = await supabase
+            .from('categories')
+            .update(fallbackPayload)
+            .eq('id', id)
+            .select()
+            .single();
+          if (!retryRes.error && retryRes.data) {
+            data = retryRes.data;
+            error = null;
+          }
+        }
 
         if (error) {
           console.error('[Supabase Category Update Error]:', error);
@@ -976,6 +1010,9 @@ export const categoryService = {
         }
 
         const updatedCat = mapDbCategoryToCategory(data);
+        if (!updatedCat.bengaliName && categoryData.bengaliName) {
+          updatedCat.bengaliName = categoryData.bengaliName.trim();
+        }
 
         // Sync local
         const localCats = getLocalDetailedCategories();

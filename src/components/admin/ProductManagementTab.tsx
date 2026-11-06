@@ -177,12 +177,19 @@ export const ProductManagementTab: React.FC<ProductManagementTabProps> = ({
               onChange={(e) => setSelectedCategory(e.target.value)}
               className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:border-slate-900 focus:bg-white transition-colors cursor-pointer"
             >
-              <option value="All">সকল ক্যাটাগরি</option>
-              {categoryNames.map((cat) => (
-                <option key={cat} value={cat}>
-                  {cat}
-                </option>
-              ))}
+              <option value="All">সকল ক্যাটাগরি (All Categories)</option>
+              {categoryNames.map((cat) => {
+                const matchedCat = categories.find(
+                  (c) =>
+                    typeof c !== 'string' &&
+                    c.name.trim().toLowerCase() === cat.trim().toLowerCase()
+                ) as Category | undefined;
+                return (
+                  <option key={cat} value={cat}>
+                    {cat} {matchedCat?.bengaliName ? `(${matchedCat.bengaliName})` : ''}
+                  </option>
+                );
+              })}
             </select>
           </div>
 

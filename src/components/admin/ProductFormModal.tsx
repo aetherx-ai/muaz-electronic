@@ -489,8 +489,9 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                             isActive: true,
                           });
                           setIsCreatingCategory(false);
-                          if (res.success && res.category) {
-                            setCategory(res.category.name);
+                          if (res.success) {
+                            const chosenName = res.category?.name || inlineCatName.trim();
+                            setCategory(chosenName);
                             setInlineCatName('');
                             setInlineCatBengali('');
                             setIsInlineCategoryOpen(false);
@@ -517,6 +518,11 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                         : 'border-white/[0.08] focus:border-[#FFC928] focus:ring-1 focus:ring-[#FFC928]/30'
                     }`}
                   >
+                    {!category && (
+                      <option value="" disabled className="bg-[#141519] text-zinc-400">
+                        -- ক্যাটাগরি নির্বাচন করুন --
+                      </option>
+                    )}
                     {Array.from(
                       new Set([
                         ...categories
@@ -526,7 +532,9 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                       ])
                     ).map((catName) => {
                       const matchedCat = categories.find(
-                        (c) => typeof c !== 'string' && c.name === catName
+                        (c) =>
+                          typeof c !== 'string' &&
+                          c.name.trim().toLowerCase() === catName.trim().toLowerCase()
                       ) as Category | undefined;
                       return (
                         <option key={catName} value={catName} className="bg-[#141519] text-zinc-100">

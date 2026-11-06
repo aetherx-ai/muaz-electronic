@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Image as ImageIcon, Sparkles, AlertCircle, Check, Upload } from 'lucide-react';
 import { Category } from '../../types';
 import { CATEGORY_ICON_OPTIONS, renderCategoryIcon } from '../../lib/categoryIcons';
+import { generateCategorySlug } from '../../lib/supabase';
 
 interface CategoryFormModalProps {
   isOpen: boolean;
@@ -61,11 +62,7 @@ export const CategoryFormModal: React.FC<CategoryFormModalProps> = ({
   const handleNameChange = (val: string) => {
     setName(val);
     if (!categoryToEdit) {
-      const generated = val
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-|-$/g, '');
-      setSlug(generated);
+      setSlug(generateCategorySlug(val));
     }
   };
 
@@ -94,13 +91,12 @@ export const CategoryFormModal: React.FC<CategoryFormModalProps> = ({
     setIsSubmitting(true);
     setError(null);
 
+    const generatedSlug = (slug.trim() || generateCategorySlug(name.trim()));
+
     const payload: Partial<Category> = {
       name: name.trim(),
       bengaliName: bengaliName.trim() || undefined,
-      slug: (slug.trim() || name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-')).replace(
-        /^-|-$/g,
-        ''
-      ),
+      slug: generatedSlug,
       icon,
       image: image.trim() || undefined,
       description: description.trim() || undefined,

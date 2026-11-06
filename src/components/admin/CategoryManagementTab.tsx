@@ -555,7 +555,7 @@ export const CategoryManagementTab: React.FC<CategoryManagementTabProps> = ({
                           {cat.name}
                         </span>
                         {cat.bengaliName && (
-                          <span className="text-[11px] text-slate-500 font-bengali truncate hidden sm:inline">
+                          <span className="text-[11px] text-slate-500 font-bengali truncate">
                             ({cat.bengaliName})
                           </span>
                         )}
