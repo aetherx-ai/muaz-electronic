@@ -1323,7 +1323,6 @@ function mapDbProductToProduct(row: any): Product {
     price: Number(row.price),
     salePrice: row.sale_price ? Number(row.sale_price) : undefined,
     category: row.category,
-    categoryId: row.category_id || undefined,
     brand: row.brand || 'MUAZ ELECTRONIC',
     stock: Number(row.stock || 0),
     status: row.status || 'published',
@@ -1355,10 +1354,6 @@ function mapProductToDbPayload(product: Product): Record<string, unknown> {
     specs: product.specs || [],
   };
 
-  if (product.categoryId) {
-    payload.category_id = product.categoryId;
-  }
-
   return payload;
 }
 
@@ -1376,9 +1371,6 @@ function mapPartialProductToDbPayload(
     payload.sale_price = product.salePrice || null;
   }
   if (product.category !== undefined) payload.category = product.category;
-  if (product.categoryId !== undefined) {
-    payload.category_id = product.categoryId || null;
-  }
   if (product.brand !== undefined) payload.brand = product.brand;
   if (product.stock !== undefined) payload.stock = product.stock;
   if (product.status !== undefined) payload.status = product.status;

@@ -181,8 +181,16 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
       setName(productToEdit.name || '');
       setBengaliName(productToEdit.bengaliName || '');
       setPrice(productToEdit.price || '');
-      setSalePrice(productToEdit.salePrice || '');
-      setCategory(productToEdit.category || '');
+      const existingCat = productToEdit.category || '';
+      const matchedCat = categories.find(
+        (c) =>
+          typeof c !== 'string' &&
+          (c.name.trim().toLowerCase() === existingCat.trim().toLowerCase() ||
+            c.id === existingCat ||
+            c.slug === existingCat ||
+            (c.bengaliName && c.bengaliName.trim().toLowerCase() === existingCat.trim().toLowerCase()))
+      ) as Category | undefined;
+      setCategory(matchedCat ? matchedCat.name : existingCat);
       setBrand(productToEdit.brand || 'MUAZ ELECTRONIC');
       setStock(typeof productToEdit.stock === 'number' ? productToEdit.stock : 20);
       setStatus(productToEdit.status || 'published');
@@ -604,8 +612,15 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
     const matchedCategory = categories.find(
       (c) =>
         typeof c !== 'string' &&
-        (c.name.trim().toLowerCase() === category.trim().toLowerCase() || c.id === category)
+        (c.name.trim().toLowerCase() === category.trim().toLowerCase() ||
+          c.id === category ||
+          c.slug === category ||
+          (c.bengaliName && c.bengaliName.trim().toLowerCase() === category.trim().toLowerCase()))
     ) as Category | undefined;
+
+    const finalCategoryName = (matchedCategory && typeof matchedCategory !== 'string')
+      ? matchedCategory.name
+      : category.trim();
 
     const primaryImg = activeHeroImage;
     const primaryFile = imageFiles[primaryImageIndex] || imageFiles[0];
@@ -615,8 +630,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
       bengaliName: bengaliName.trim() || undefined,
       price: Number(price),
       salePrice: salePrice !== '' ? Number(salePrice) : undefined,
-      category: matchedCategory?.name || category.trim(),
-      categoryId: matchedCategory?.id,
+      category: finalCategoryName,
       brand: brand.trim() || 'MUAZ ELECTRONIC',
       stock: Number(stock),
       status: targetStatus || status,
