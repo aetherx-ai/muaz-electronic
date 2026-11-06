@@ -1,10 +1,19 @@
 -- ==============================================================================
--- MUAZ ELECTRONIC: Supabase Admin Authorization & Categories RLS Fix
--- Target: Resolve 42501 (new row violates row-level security policy for table "categories")
--- Verified admin_users schema: (user_id UUID, is_active BOOLEAN, created_at TIMESTAMPTZ)
+-- MUAZ ELECTRONIC: Category UUID & Slug Mismatch Fix
+-- Verified categories schema:
+--   id: UUID DEFAULT gen_random_uuid() PRIMARY KEY NOT NULL
+--   name: TEXT NOT NULL
+--   slug: TEXT NOT NULL UNIQUE
+--   bengali_name: TEXT nullable
+--   icon: TEXT nullable DEFAULT 'Layers'
+--   description: TEXT nullable
+--   image: TEXT nullable
+--   is_active: BOOLEAN DEFAULT true
+--   display_order: INTEGER DEFAULT 0
+--   created_at: TIMESTAMPTZ DEFAULT timezone('utc'::text, now())
 -- ==============================================================================
 
--- 1. Ensure admin_users table exists with ONLY the verified schema
+-- 1. Ensure admin_users exists with verified schema: (user_id UUID, is_active BOOLEAN, created_at TIMESTAMPTZ)
 CREATE TABLE IF NOT EXISTS public.admin_users (
     user_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
     is_active BOOLEAN NOT NULL DEFAULT true,
@@ -12,12 +21,9 @@ CREATE TABLE IF NOT EXISTS public.admin_users (
 );
 
 CREATE INDEX IF NOT EXISTS idx_admin_users_is_active ON public.admin_users(is_active);
-
--- Enable RLS on admin_users
 ALTER TABLE public.admin_users ENABLE ROW LEVEL SECURITY;
 
--- 2. Non-recursive SECURITY DEFINER helper function
--- Fixed search_path guarantees security and eliminates missing schema issues
+-- 2. Non-recursive SECURITY DEFINER authorization function
 CREATE OR REPLACE FUNCTION public.is_admin()
 RETURNS BOOLEAN
 LANGUAGE plpgsql
@@ -31,12 +37,10 @@ DECLARE
 BEGIN
     _current_uid := auth.uid();
     
-    -- Unauthenticated / anon requests are immediately rejected
     IF _current_uid IS NULL THEN
         RETURN FALSE;
     END IF;
 
-    -- Query admin_users with elevated privileges (bypasses RLS recursion)
     SELECT is_active INTO _is_active
     FROM public.admin_users
     WHERE user_id = _current_uid
@@ -46,12 +50,10 @@ BEGIN
 END;
 $$;
 
--- Grant execution permissions
 REVOKE ALL ON FUNCTION public.is_admin() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.is_admin() TO authenticated, anon;
 
 -- 3. Reset and recreate RLS policies on public.admin_users
--- Cleanly drop all pre-existing policies on admin_users
 DO $$
 DECLARE
     pol RECORD;
@@ -62,23 +64,23 @@ BEGIN
     END LOOP;
 END $$;
 
--- Authenticated users can read ONLY their own admin record
 CREATE POLICY "Users can read own admin record"
 ON public.admin_users
 FOR SELECT
 TO authenticated
 USING (user_id = auth.uid());
 
--- 4. Reset and recreate RLS policies on public.categories
+-- 4. Ensure categories table matches actual UUID primary key schema
 CREATE TABLE IF NOT EXISTS public.categories (
-    id TEXT PRIMARY KEY,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
     bengali_name TEXT,
     slug TEXT NOT NULL UNIQUE,
     icon TEXT DEFAULT 'Layers',
+    image TEXT,
+    description TEXT,
     is_active BOOLEAN NOT NULL DEFAULT true,
     display_order INTEGER NOT NULL DEFAULT 0,
-    description TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
 );
@@ -125,18 +127,16 @@ FOR DELETE
 TO authenticated
 USING (public.is_admin());
 
--- 5. Authorize all current authenticated users in auth.users
--- This ensures the admin user account exists in admin_users with is_active = true
+-- 5. Ensure current authenticated users in auth.users are marked active
 INSERT INTO public.admin_users (user_id, is_active)
 SELECT id, true
 FROM auth.users
 WHERE id NOT IN (SELECT user_id FROM public.admin_users)
 ON CONFLICT (user_id) DO UPDATE SET is_active = true;
 
--- 6. Ensure "Watch" ("ঘড়ি") category exists in categories table
-INSERT INTO public.categories (id, name, bengali_name, slug, icon, is_active, display_order, description)
+-- 6. Insert "Watch" ("ঘড়ি") category allowing PostgreSQL to automatically generate UUID
+INSERT INTO public.categories (name, bengali_name, slug, icon, is_active, display_order, description)
 VALUES (
-    'cat-watch',
     'Watch',
     'ঘড়ি',
     'watch',

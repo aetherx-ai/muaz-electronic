@@ -747,10 +747,12 @@ export const categoryService = {
       return { success: false, error: 'ক্যাটাগরির নাম দিন' };
     }
 
-    const slug = (
-      payload.slug?.trim() ||
-      trimmedName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
-    ) || `cat-${Date.now()}`;
+    const generatedSlug = generateCategorySlug(trimmedName);
+    const rawSlug = (payload.slug && payload.slug.trim()) ? payload.slug.trim() : generatedSlug;
+    const finalSlug = rawSlug
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]+/g, '-')
+      .replace(/^-+|-+$/g, '') || generatedSlug;
 
     // 1. When Supabase is configured, execute on Supabase first
     if (isSupabaseConfigured && supabase) {
@@ -771,17 +773,16 @@ export const categoryService = {
           };
         }
 
-        const categoryId = payload.id || (slug.startsWith('cat-') ? slug : `cat-${slug}`);
-        const insertPayload = {
-          id: categoryId,
+        // Do NOT pass a slug string to UUID column! Let Supabase gen_random_uuid() generate the UUID.
+        const insertPayload: Record<string, unknown> = {
           name: trimmedName,
           bengali_name: payload.bengaliName?.trim() || null,
-          slug,
+          slug: finalSlug,
           icon: payload.icon || 'Layers',
           image: payload.image || null,
           description: payload.description || null,
           is_active: payload.isActive !== undefined ? payload.isActive : true,
-          display_order: payload.displayOrder || 99,
+          display_order: payload.displayOrder !== undefined ? Number(payload.displayOrder) : 0,
         };
 
         const { data, error } = await supabase
@@ -1322,6 +1323,7 @@ function mapDbProductToProduct(row: any): Product {
     price: Number(row.price),
     salePrice: row.sale_price ? Number(row.sale_price) : undefined,
     category: row.category,
+    categoryId: row.category_id || undefined,
     brand: row.brand || 'MUAZ ELECTRONIC',
     stock: Number(row.stock || 0),
     status: row.status || 'published',
@@ -1336,7 +1338,7 @@ function mapDbProductToProduct(row: any): Product {
 }
 
 function mapProductToDbPayload(product: Product): Record<string, unknown> {
-  return {
+  const payload: Record<string, unknown> = {
     id: product.id,
     name: product.name,
     bengali_name: product.bengaliName || null,
@@ -1352,6 +1354,12 @@ function mapProductToDbPayload(product: Product): Record<string, unknown> {
     features: product.features,
     specs: product.specs || [],
   };
+
+  if (product.categoryId) {
+    payload.category_id = product.categoryId;
+  }
+
+  return payload;
 }
 
 function mapPartialProductToDbPayload(
@@ -1368,6 +1376,9 @@ function mapPartialProductToDbPayload(
     payload.sale_price = product.salePrice || null;
   }
   if (product.category !== undefined) payload.category = product.category;
+  if (product.categoryId !== undefined) {
+    payload.category_id = product.categoryId || null;
+  }
   if (product.brand !== undefined) payload.brand = product.brand;
   if (product.stock !== undefined) payload.stock = product.stock;
   if (product.status !== undefined) payload.status = product.status;

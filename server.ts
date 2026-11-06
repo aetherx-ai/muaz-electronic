@@ -362,7 +362,9 @@ app.post('/api/categories', (req: Request, res: Response) => {
   const now = new Date().toISOString();
 
   const newCategory: CategoryRecord = {
-    id: `cat-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    id: (typeof req.body.id === 'string' && req.body.id.trim())
+      ? req.body.id.trim()
+      : crypto.randomUUID(),
     name: trimmedName,
     bengaliName: bengaliName ? String(bengaliName).trim() : undefined,
     slug,

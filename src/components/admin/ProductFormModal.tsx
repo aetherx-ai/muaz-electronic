@@ -279,12 +279,19 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
     const cleanFeatures = features.map((f) => f.trim()).filter(Boolean);
     const cleanSpecs = specs.filter((s) => s.label.trim() && s.value.trim());
 
+    const matchedCategory = categories.find(
+      (c) =>
+        typeof c !== 'string' &&
+        (c.name.trim().toLowerCase() === category.trim().toLowerCase() || c.id === category)
+    ) as Category | undefined;
+
     const productPayload: Omit<Product, 'id'> = {
       name: name.trim(),
       bengaliName: bengaliName.trim() || undefined,
       price: Number(price),
       salePrice: salePrice !== '' ? Number(salePrice) : undefined,
-      category: category.trim(),
+      category: matchedCategory?.name || category.trim(),
+      categoryId: matchedCategory?.id,
       brand: brand.trim() || 'MUAZ ELECTRONIC',
       stock: Number(stock),
       status,

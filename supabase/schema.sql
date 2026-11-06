@@ -51,7 +51,7 @@ GRANT EXECUTE ON FUNCTION public.is_admin() TO authenticated, anon;
 -- 2. CATEGORIES TABLE
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.categories (
-    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL UNIQUE,
     bengali_name TEXT,
     slug TEXT NOT NULL UNIQUE,

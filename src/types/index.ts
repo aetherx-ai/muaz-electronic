@@ -7,6 +7,7 @@ export interface Product {
   price: number;
   salePrice?: number;
   category: string;
+  categoryId?: string;
   brand?: string;
   stock: number;
   status: ProductStatus;
