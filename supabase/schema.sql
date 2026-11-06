@@ -3,13 +3,13 @@
 -- ==============================================================================
 -- Run this in your Supabase Project: SQL Editor -> New Query -> Run
 
--- 1. Create categories table
+-- 1. Create categories table (or add missing columns if table already exists)
 CREATE TABLE IF NOT EXISTS public.categories (
     id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
     name TEXT NOT NULL UNIQUE,
     bengali_name TEXT,
     slug TEXT NOT NULL UNIQUE,
-    icon TEXT,
+    icon TEXT DEFAULT 'Layers',
     image TEXT,
     description TEXT,
     is_active BOOLEAN NOT NULL DEFAULT true,
@@ -17,6 +17,14 @@ CREATE TABLE IF NOT EXISTS public.categories (
     created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
 );
+
+-- Idempotent column additions for existing databases:
+ALTER TABLE public.categories ADD COLUMN IF NOT EXISTS bengali_name TEXT;
+ALTER TABLE public.categories ADD COLUMN IF NOT EXISTS description TEXT;
+ALTER TABLE public.categories ADD COLUMN IF NOT EXISTS icon TEXT DEFAULT 'Layers';
+ALTER TABLE public.categories ADD COLUMN IF NOT EXISTS image TEXT;
+ALTER TABLE public.categories ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE public.categories ADD COLUMN IF NOT EXISTS display_order INTEGER NOT NULL DEFAULT 0;
 
 -- 2. Create products table
 CREATE TABLE IF NOT EXISTS public.products (

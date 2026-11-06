@@ -61,6 +61,21 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
     });
   }, [products, selectedCategory, searchQuery, sortBy]);
 
+  // Guaranteed deduplication of category chips for unique React keys
+  const dedupedCategories = useMemo(() => {
+    const list: (string | Category)[] = ['All Products'];
+    const seen = new Set<string>(['all products']);
+
+    for (const cat of categories) {
+      const name = (typeof cat === 'string' ? cat : cat.name).trim();
+      if (!name || seen.has(name.toLowerCase())) continue;
+      seen.add(name.toLowerCase());
+      list.push(cat);
+    }
+
+    return list;
+  }, [categories]);
+
   const handleViewAllClick = () => {
     setSelectedCategory('All Products');
     setSearchQuery('');
@@ -162,14 +177,14 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
 
           {/* Clean Rounded Category Chips */}
           <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-3 scrollbar-none mb-5">
-            {categories.map((cat) => {
+            {dedupedCategories.map((cat, idx) => {
               const catName = typeof cat === 'string' ? cat : cat.name;
               const catBengali = typeof cat === 'string' ? undefined : cat.bengaliName;
               const catIcon = typeof cat === 'string' ? undefined : cat.icon;
-              const isSelected = selectedCategory === catName;
+              const isSelected = selectedCategory.toLowerCase() === catName.toLowerCase();
               return (
                 <button
-                  key={catName}
+                  key={`chip-${catName}-${idx}`}
                   onClick={() => setSelectedCategory(catName)}
                   className={`px-3.5 py-1.5 text-xs sm:text-[13px] font-medium rounded-full transition-all duration-150 whitespace-nowrap shrink-0 flex items-center gap-1.5 ${
                     isSelected

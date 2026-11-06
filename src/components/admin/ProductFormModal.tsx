@@ -527,8 +527,8 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                       new Set([
                         ...categories
                           .map((c) => (typeof c === 'string' ? c : c.name))
-                          .filter((c) => c !== 'All Products'),
-                        ...(category ? [category] : []),
+                          .filter((c) => c && c.trim() !== 'All Products'),
+                        ...(category && category.trim() !== 'All Products' ? [category] : []),
                       ])
                     ).map((catName) => {
                       const matchedCat = categories.find(

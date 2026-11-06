@@ -138,7 +138,7 @@ function MainApp() {
         {/* Curated Product Discovery Catalog with Live Database Items */}
         <ProductCatalog
           products={products}
-          categories={['All Products', ...categories]}
+          categories={categories}
           searchQuery={searchQuery}
           setSearchQuery={setSearchQuery}
           searchInputRef={searchInputRef}

@@ -53,7 +53,13 @@ export const ProductManagementTab: React.FC<ProductManagementTabProps> = ({
   const itemsPerPage = 8;
 
   const categoryNames = useMemo(() => {
-    return categories.map((c) => (typeof c === 'string' ? c : c.name));
+    return Array.from(
+      new Set(
+        categories
+          .map((c) => (typeof c === 'string' ? c : c.name))
+          .filter((c) => c && c !== 'All' && c !== 'All Products')
+      )
+    );
   }, [categories]);
 
   const filteredProducts = useMemo(() => {

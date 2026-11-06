@@ -88,14 +88,14 @@ export const Header: React.FC<HeaderProps> = ({
                 {categories && categories.length > 0 && (
                   <div className="absolute top-full -left-4 pt-2 w-60 opacity-0 translate-y-1 invisible group-hover:opacity-100 group-hover:translate-y-0 group-hover:visible transition-all duration-200 z-50">
                     <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-2 space-y-0.5 max-h-80 overflow-y-auto">
-                      {categories.map((c) => {
+                      {categories.map((c, idx) => {
                         const name = typeof c === 'string' ? c : c.name;
                         const icon = typeof c === 'string' ? undefined : c.icon;
                         const bengali = typeof c === 'string' ? undefined : c.bengaliName;
                         if (name === 'All Products') return null;
                         return (
                           <button
-                            key={name}
+                            key={`header-cat-${name}-${idx}`}
                             type="button"
                             onClick={() => {
                               onSelectCategory?.(name);
@@ -235,14 +235,14 @@ export const Header: React.FC<HeaderProps> = ({
                         ক্যাটাগরি সমূহ
                       </span>
                       <div className="space-y-0.5">
-                        {categories.map((c) => {
+                        {categories.map((c, idx) => {
                           const name = typeof c === 'string' ? c : c.name;
                           const icon = typeof c === 'string' ? undefined : c.icon;
                           const bengali = typeof c === 'string' ? undefined : c.bengaliName;
                           if (name === 'All Products') return null;
                           return (
                             <button
-                              key={`mob-${name}`}
+                              key={`mob-${name}-${idx}`}
                               type="button"
                               onClick={() => {
                                 setMobileMenuOpen(false);

@@ -698,24 +698,104 @@ export function saveLocalDetailedCategories(categories: Category[]): void {
   }
 }
 
+// -----------------------------------------------------------------------------
+// DYNAMIC CATEGORY HELPERS & SCHEMA-ADAPTIVE ENGINE
+// -----------------------------------------------------------------------------
+let detectedCategoryColumns: Set<string> | null = null;
+const unsupportedCategoryColumns = new Set<string>();
+
+export function extractMissingColumnName(errorMessage?: string): string | null {
+  if (!errorMessage) return null;
+
+  // PostgREST: Could not find the 'xyz' column of 'categories' in the schema cache
+  const match1 = errorMessage.match(/Could not find the '([^']+)' column/i);
+  if (match1 && match1[1]) return match1[1].trim();
+
+  // PostgreSQL: column "xyz" of relation "categories" does not exist
+  const match2 = errorMessage.match(/column ["']?([a-zA-Z0-9_]+)["']? of relation/i);
+  if (match2 && match2[1]) return match2[1].trim();
+
+  // PostgreSQL: column categories.xyz does not exist
+  const match3 = errorMessage.match(/column [a-zA-Z0-9_]+\.([a-zA-Z0-9_]+) does not exist/i);
+  if (match3 && match3[1]) return match3[1].trim();
+
+  return null;
+}
+
+function updateDetectedColumns(rows: any[]) {
+  if (rows && rows.length > 0 && !detectedCategoryColumns) {
+    const cols = Object.keys(rows[0]);
+    detectedCategoryColumns = new Set(cols);
+    console.log('[Supabase Category Schema Auto-Detected]: Present columns in DB:', cols);
+  }
+}
+
+function buildSafeCategoryDbPayload(
+  desiredPayload: Record<string, unknown>
+): Record<string, unknown> {
+  const safe: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(desiredPayload)) {
+    // If dynamically found to be unsupported, skip sending
+    if (unsupportedCategoryColumns.has(key)) continue;
+
+    // If we have verified the exact column set from DB and this column is absent, skip sending
+    if (detectedCategoryColumns && !detectedCategoryColumns.has(key)) continue;
+
+    safe[key] = value;
+  }
+  return safe;
+}
+
+async function fetchSupabaseCategories(onlyActive = false): Promise<any[]> {
+  if (!isSupabaseConfigured || !supabase) return [];
+
+  try {
+    let query = supabase.from('categories').select('*');
+
+    if (onlyActive && !unsupportedCategoryColumns.has('is_active')) {
+      query = query.eq('is_active', true);
+    }
+
+    if (!unsupportedCategoryColumns.has('display_order')) {
+      query = query.order('display_order', { ascending: true });
+    }
+
+    const res = await query;
+
+    if (res.error) {
+      console.warn('[Supabase Category Query Warning]:', res.error.message);
+      const missingCol = extractMissingColumnName(res.error.message);
+      if (missingCol) {
+        unsupportedCategoryColumns.add(missingCol);
+      }
+
+      // Safe fallback: standard select without filters or ordering that may fail
+      const fallbackRes = await supabase.from('categories').select('*');
+      if (!fallbackRes.error && fallbackRes.data) {
+        updateDetectedColumns(fallbackRes.data);
+        return fallbackRes.data;
+      }
+      return [];
+    }
+
+    if (res.data && Array.isArray(res.data)) {
+      updateDetectedColumns(res.data);
+      return res.data;
+    }
+  } catch (err) {
+    console.error('[Supabase Category Fetch Exception]:', err);
+  }
+
+  return [];
+}
+
 export const categoryService = {
   // Public active categories (ordered by displayOrder)
   async getActiveCategories(): Promise<Category[]> {
     if (isSupabaseConfigured && supabase) {
-      try {
-        const { data, error } = await supabase
-          .from('categories')
-          .select('*')
-          .eq('is_active', true)
-          .order('display_order', { ascending: true });
-
-        if (error) {
-          console.error('[Supabase getActiveCategories error]:', error.message);
-        } else if (data && Array.isArray(data) && data.length > 0) {
-          return data.map(mapDbCategoryToCategory);
-        }
-      } catch (err) {
-        console.error('[Supabase getActiveCategories exception]:', err);
+      const rawRows = await fetchSupabaseCategories(true);
+      if (rawRows.length > 0) {
+        return rawRows.map((r) => mapDbCategoryToCategory(r));
       }
     }
 
@@ -732,21 +812,14 @@ export const categoryService = {
   async getAllCategoriesAdmin(): Promise<Category[]> {
     if (isSupabaseConfigured && supabase) {
       try {
-        const [catsRes, prodsRes] = await Promise.all([
-          supabase
-            .from('categories')
-            .select('*')
-            .order('display_order', { ascending: true }),
-          supabase
-            .from('products')
-            .select('category'),
+        const [rawCats, prodsRes] = await Promise.all([
+          fetchSupabaseCategories(false),
+          supabase.from('products').select('category'),
         ]);
 
-        if (catsRes.error) {
-          console.error('[Supabase getAllCategoriesAdmin categories error]:', catsRes.error);
-        } else if (catsRes.data) {
+        if (rawCats.length > 0) {
           const prods = prodsRes.data || [];
-          return catsRes.data.map((row) => {
+          return rawCats.map((row) => {
             const cat = mapDbCategoryToCategory(row);
             cat.productCount = prods.filter((p) => p.category === cat.name).length;
             return cat;
@@ -765,7 +838,7 @@ export const categoryService = {
     }));
   },
 
-  // Create new category (simple by name or full payload)
+  // Create new category (simple by name or full payload) with Auto-Healing Schema Adaptation
   async addCategory(
     categoryInput: string | Partial<Category>
   ): Promise<{ success: boolean; category?: Category; error: string | null }> {
@@ -803,6 +876,7 @@ export const categoryService = {
           bengali_name: bengaliName || null,
           slug,
           icon,
+          description: description || null,
         });
 
         // Pre-check for duplicate name
@@ -823,7 +897,7 @@ export const categoryService = {
           };
         }
 
-        const dbPayload: Record<string, unknown> = {
+        const desiredPayload: Record<string, unknown> = {
           id: newId,
           name: rawName,
           bengali_name: bengaliName || null,
@@ -835,68 +909,88 @@ export const categoryService = {
           display_order: displayOrder,
         };
 
-        let { data, error } = await supabase
-          .from('categories')
-          .insert([dbPayload])
-          .select()
-          .single();
+        let insertData: any = null;
+        let lastError: any = null;
+        let attempts = 0;
+        const maxAttempts = 8;
 
-        // If unique slug collision happens (code 23505), retry once with unique suffix
-        if (error && error.code === '23505' && (error.message.includes('slug') || error.details?.includes('slug'))) {
-          const uniqueSlug = `${slug}-${Date.now().toString(36).slice(-4)}`;
-          console.warn('[Supabase Category] Slug collision detected. Retrying with unique slug:', uniqueSlug);
-          const retryRes = await supabase
+        while (attempts < maxAttempts) {
+          attempts++;
+          const dbPayload = buildSafeCategoryDbPayload(desiredPayload);
+
+          console.log(`[Supabase Category Insert Attempt ${attempts}]: Sending columns:`, Object.keys(dbPayload));
+
+          const res = await supabase
             .from('categories')
-            .insert([{ ...dbPayload, slug: uniqueSlug }])
+            .insert([dbPayload])
             .select()
             .single();
-          data = retryRes.data;
-          error = retryRes.error;
-        }
 
-        // Schema cache fallback if remote PostgREST cache has not yet refreshed bengali_name
-        if (error && error.message && error.message.includes('bengali_name')) {
-          console.warn('[Supabase Category] PostgREST schema cache note for bengali_name, retrying insert:', error.message);
-          const { bengali_name: _b, ...fallbackPayload } = dbPayload;
-          const retryRes = await supabase
-            .from('categories')
-            .insert([fallbackPayload])
-            .select()
-            .single();
-          if (!retryRes.error && retryRes.data) {
-            data = retryRes.data;
-            error = null;
+          if (!res.error && res.data) {
+            insertData = res.data;
+            lastError = null;
+            break;
           }
+
+          lastError = res.error;
+
+          // Missing column error from PostgREST / PostgreSQL schema cache
+          const missingCol = extractMissingColumnName(res.error?.message);
+          if (missingCol && !unsupportedCategoryColumns.has(missingCol)) {
+            console.warn(`[Supabase Category Auto-Healing] Column '${missingCol}' is not present in categories table. Omitting it and retrying immediately...`);
+            unsupportedCategoryColumns.add(missingCol);
+            continue;
+          }
+
+          // Unique slug collision (code 23505)
+          if (res.error?.code === '23505' && (res.error.message.includes('slug') || res.error.details?.includes('slug'))) {
+            const uniqueSlug = `${slug}-${Date.now().toString(36).slice(-4)}`;
+            console.warn('[Supabase Category] Slug collision detected. Retrying with unique slug:', uniqueSlug);
+            desiredPayload.slug = uniqueSlug;
+            continue;
+          }
+
+          // ID type syntax issue (e.g. if table expects DB default)
+          if (res.error?.message?.includes('uuid') && dbPayload.id) {
+            console.warn('[Supabase Category] UUID issue with custom id. Removing id from payload...');
+            delete desiredPayload.id;
+            unsupportedCategoryColumns.add('id');
+            continue;
+          }
+
+          // Unrecoverable error
+          break;
         }
 
-        if (error) {
-          console.error('[Supabase Category Insert Error]:', {
-            code: error.code,
-            message: error.message,
-            details: error.details,
-            hint: error.hint,
-          });
+        if (lastError || !insertData) {
+          console.error('[Supabase Category Insert Error]:', lastError);
 
           let userMessage = 'ক্যাটাগরি ডাটাবেজে সংরক্ষণ করা যায়নি।';
-          if (error.code === '23505') {
+          if (lastError?.code === '23505') {
             userMessage = `"${rawName}" নামের ক্যাটাগরি বা স্লাগ ইতিমধ্যে ডাটাবেজে বিদ্যমান।`;
-          } else if (error.code === '42501' || error.message.includes('permission') || error.message.includes('policy')) {
+          } else if (lastError?.code === '42501' || lastError?.message?.includes('permission') || lastError?.message?.includes('policy')) {
             userMessage = 'ডাটাবেজে ক্যাটাগরি যুক্ত করার অনুমতি নেই (RLS Policy)। অনুগ্রহ করে নিশ্চিত করুন যে আপনি অ্যাডমিন হিসেবে লগইন করেছেন।';
-          } else if (error.message) {
-            userMessage = `ডাটাবেজ ত্রুটি: ${error.message}`;
+          } else if (lastError?.message) {
+            userMessage = `ডাটাবেজ ত্রুটি: ${lastError.message}`;
           }
 
           return { success: false, error: userMessage };
         }
 
-        if (!data) {
-          return { success: false, error: 'ডাটাবেজ থেকে ক্যাটাগরির তথ্য পাওয়া যায়নি।' };
-        }
+        updateDetectedColumns([insertData]);
 
-        const createdCategory = mapDbCategoryToCategory(data);
+        const createdCategory = mapDbCategoryToCategory(insertData, {
+          bengaliName,
+          description,
+          icon,
+          image,
+          isActive,
+          displayOrder,
+        });
+
         console.log('[Supabase Category Created Successfully]:', createdCategory);
 
-        // Also sync into local cache
+        // Sync into local cache
         const localCats = getLocalDetailedCategories();
         saveLocalDetailedCategories([...localCats.filter((c) => c.name !== createdCategory.name), createdCategory]);
 
@@ -947,7 +1041,7 @@ export const categoryService = {
     }
   },
 
-  // Edit category (with cascading rename)
+  // Edit category (with cascading rename and Auto-Healing Schema Adaptation)
   async updateCategory(
     id: string,
     categoryData: Partial<Category>,
@@ -957,43 +1051,54 @@ export const categoryService = {
 
     if (isSupabaseConfigured && supabase) {
       try {
-        const dbPayload: Record<string, unknown> = {
+        const desiredPayload: Record<string, unknown> = {
           updated_at: now,
         };
-        if (categoryData.name !== undefined) dbPayload.name = categoryData.name.trim();
-        if (categoryData.bengaliName !== undefined) dbPayload.bengali_name = categoryData.bengaliName?.trim() || null;
-        if (categoryData.slug !== undefined) dbPayload.slug = categoryData.slug.trim();
-        if (categoryData.icon !== undefined) dbPayload.icon = categoryData.icon;
-        if (categoryData.image !== undefined) dbPayload.image = categoryData.image || null;
-        if (categoryData.description !== undefined) dbPayload.description = categoryData.description || null;
-        if (categoryData.isActive !== undefined) dbPayload.is_active = categoryData.isActive;
-        if (categoryData.displayOrder !== undefined) dbPayload.display_order = categoryData.displayOrder;
+        if (categoryData.name !== undefined) desiredPayload.name = categoryData.name.trim();
+        if (categoryData.bengaliName !== undefined) desiredPayload.bengali_name = categoryData.bengaliName?.trim() || null;
+        if (categoryData.slug !== undefined) desiredPayload.slug = categoryData.slug.trim();
+        if (categoryData.icon !== undefined) desiredPayload.icon = categoryData.icon;
+        if (categoryData.image !== undefined) desiredPayload.image = categoryData.image || null;
+        if (categoryData.description !== undefined) desiredPayload.description = categoryData.description || null;
+        if (categoryData.isActive !== undefined) desiredPayload.is_active = categoryData.isActive;
+        if (categoryData.displayOrder !== undefined) desiredPayload.display_order = categoryData.displayOrder;
 
-        let { data, error } = await supabase
-          .from('categories')
-          .update(dbPayload)
-          .eq('id', id)
-          .select()
-          .single();
+        let updateData: any = null;
+        let lastError: any = null;
+        let attempts = 0;
 
-        if (error && error.message && error.message.includes('bengali_name')) {
-          console.warn('[Supabase Category Update] PostgREST schema cache note for bengali_name, retrying update:', error.message);
-          const { bengali_name: _b, ...fallbackPayload } = dbPayload;
-          const retryRes = await supabase
+        while (attempts < 8) {
+          attempts++;
+          const dbPayload = buildSafeCategoryDbPayload(desiredPayload);
+
+          const res = await supabase
             .from('categories')
-            .update(fallbackPayload)
+            .update(dbPayload)
             .eq('id', id)
             .select()
             .single();
-          if (!retryRes.error && retryRes.data) {
-            data = retryRes.data;
-            error = null;
+
+          if (!res.error && res.data) {
+            updateData = res.data;
+            lastError = null;
+            break;
           }
+
+          lastError = res.error;
+
+          const missingCol = extractMissingColumnName(res.error?.message);
+          if (missingCol && !unsupportedCategoryColumns.has(missingCol)) {
+            console.warn(`[Supabase Category Update Auto-Healing] Column '${missingCol}' missing. Omitting and retrying...`);
+            unsupportedCategoryColumns.add(missingCol);
+            continue;
+          }
+
+          break;
         }
 
-        if (error) {
-          console.error('[Supabase Category Update Error]:', error);
-          return { success: false, error: `আপডেট ব্যর্থ হয়েছে: ${error.message}` };
+        if (lastError || !updateData) {
+          console.error('[Supabase Category Update Error]:', lastError);
+          return { success: false, error: `আপডেট ব্যর্থ হয়েছে: ${lastError?.message || 'অজানা ত্রুটি'}` };
         }
 
         // Cascading rename to products table
@@ -1009,10 +1114,9 @@ export const categoryService = {
           }
         }
 
-        const updatedCat = mapDbCategoryToCategory(data);
-        if (!updatedCat.bengaliName && categoryData.bengaliName) {
-          updatedCat.bengaliName = categoryData.bengaliName.trim();
-        }
+        updateDetectedColumns([updateData]);
+
+        const updatedCat = mapDbCategoryToCategory(updateData, categoryData);
 
         // Sync local
         const localCats = getLocalDetailedCategories();
@@ -1063,19 +1167,25 @@ export const categoryService = {
     isActive: boolean
   ): Promise<{ success: boolean; error: string | null }> {
     if (isSupabaseConfigured && supabase) {
-      try {
-        const { error } = await supabase
-          .from('categories')
-          .update({ is_active: isActive, updated_at: new Date().toISOString() })
-          .eq('id', id);
+      if (!unsupportedCategoryColumns.has('is_active')) {
+        try {
+          const { error } = await supabase
+            .from('categories')
+            .update({ is_active: isActive })
+            .eq('id', id);
 
-        if (error) {
-          console.error('[Supabase Toggle Category Error]:', error);
-          return { success: false, error: error.message };
+          if (error) {
+            const missingCol = extractMissingColumnName(error.message);
+            if (missingCol === 'is_active') {
+              unsupportedCategoryColumns.add('is_active');
+            } else {
+              console.error('[Supabase Toggle Category Error]:', error);
+              return { success: false, error: error.message };
+            }
+          }
+        } catch (err: unknown) {
+          console.warn('[Supabase Toggle Category Exception]:', err);
         }
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : 'স্ট্যাটাস পরিবর্তন ব্যর্থ হয়েছে';
-        return { success: false, error: msg };
       }
     }
 
@@ -1093,17 +1203,27 @@ export const categoryService = {
     orderedIds: string[]
   ): Promise<{ success: boolean; error: string | null }> {
     if (isSupabaseConfigured && supabase) {
-      try {
-        const updates = orderedIds.map((id, index) =>
-          supabase
-            .from('categories')
-            .update({ display_order: index + 1, updated_at: new Date().toISOString() })
-            .eq('id', id)
-        );
-        await Promise.all(updates);
-      } catch (err: unknown) {
-        console.error('[Supabase Reorder Categories Error]:', err);
-        return { success: false, error: 'পুনর্বিন্যাস ডাটাবেজে সেভ করা যায়নি' };
+      if (!unsupportedCategoryColumns.has('display_order')) {
+        try {
+          const updates = orderedIds.map((id, index) =>
+            supabase
+              .from('categories')
+              .update({ display_order: index + 1 })
+              .eq('id', id)
+          );
+          const results = await Promise.all(updates);
+          for (const res of results) {
+            if (res.error) {
+              const missingCol = extractMissingColumnName(res.error.message);
+              if (missingCol === 'display_order') {
+                unsupportedCategoryColumns.add('display_order');
+                break;
+              }
+            }
+          }
+        } catch (err: unknown) {
+          console.error('[Supabase Reorder Categories Error]:', err);
+        }
       }
     }
 
@@ -1485,32 +1605,33 @@ function mapPartialProductToDbPayload(
   return payload;
 }
 
-function mapDbCategoryToCategory(row: any): Category {
+function mapDbCategoryToCategory(row: any, overrides?: Partial<Category>): Category {
   return {
     id: String(row.id),
     name: row.name,
-    bengaliName: row.bengali_name || undefined,
-    slug: row.slug,
-    icon: row.icon || 'Layers',
-    image: row.image || undefined,
-    description: row.description || undefined,
-    isActive: row.is_active !== undefined ? Boolean(row.is_active) : true,
-    displayOrder: row.display_order ? Number(row.display_order) : 0,
+    bengaliName: row.bengali_name || overrides?.bengaliName || undefined,
+    slug: row.slug || generateCategorySlug(row.name, row.id),
+    icon: row.icon || overrides?.icon || 'Layers',
+    image: row.image || overrides?.image || undefined,
+    description: row.description || overrides?.description || undefined,
+    isActive: row.is_active !== undefined ? Boolean(row.is_active) : (overrides?.isActive ?? true),
+    displayOrder: row.display_order ? Number(row.display_order) : (overrides?.displayOrder ?? 0),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
 }
 
 function mapCategoryToDbPayload(category: Category): Record<string, unknown> {
-  return {
+  const payload: Record<string, unknown> = {
     id: category.id,
     name: category.name,
-    bengali_name: category.bengaliName || null,
     slug: category.slug,
-    icon: category.icon || 'Layers',
-    image: category.image || null,
-    description: category.description || null,
-    is_active: category.isActive,
-    display_order: category.displayOrder,
   };
+  if (category.bengaliName !== undefined) payload.bengali_name = category.bengaliName || null;
+  if (category.icon !== undefined) payload.icon = category.icon;
+  if (category.image !== undefined) payload.image = category.image || null;
+  if (category.description !== undefined) payload.description = category.description || null;
+  if (category.isActive !== undefined) payload.is_active = category.isActive;
+  if (category.displayOrder !== undefined) payload.display_order = category.displayOrder;
+  return payload;
 }

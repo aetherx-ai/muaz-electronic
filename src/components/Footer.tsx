@@ -126,11 +126,11 @@ export const Footer: React.FC<FooterProps> = ({ onNavigateToAdmin, categories = 
             <ul className="space-y-1.5 text-xs">
               {categories
                 .filter((c) => (typeof c === 'string' ? c : c.name) !== 'All Products')
-                .map((cat) => {
+                .map((cat, idx) => {
                   const name = typeof cat === 'string' ? cat : cat.name;
                   const bengali = typeof cat === 'string' ? undefined : cat.bengaliName;
                   return (
-                    <li key={name}>
+                    <li key={`footer-cat-${name}-${idx}`}>
                       <a href="#all-products-section" className="hover:text-[#16A34A] transition-colors">
                         {bengali || name}
                       </a>
