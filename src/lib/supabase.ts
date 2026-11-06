@@ -789,6 +789,44 @@ async function fetchSupabaseCategories(onlyActive = false): Promise<any[]> {
   return [];
 }
 
+/**
+ * Verify and refresh the current Supabase auth session.
+ * Ensures mutations carry a valid, unexpired Bearer token for RLS evaluation.
+ */
+export async function getAuthenticatedAdminSession(): Promise<{
+  isAuthenticated: boolean;
+  userId: string | null;
+  email: string | null;
+}> {
+  if (!isSupabaseConfigured || !supabase) {
+    return { isAuthenticated: false, userId: null, email: null };
+  }
+
+  try {
+    const { data: sessionData, error: sessionErr } = await supabase.auth.getSession();
+    let session = sessionData?.session;
+
+    if (!session || sessionErr) {
+      const { data: refreshData, error: refreshErr } = await supabase.auth.refreshSession();
+      if (!refreshErr && refreshData?.session) {
+        session = refreshData.session;
+      }
+    }
+
+    if (session?.user) {
+      return {
+        isAuthenticated: true,
+        userId: session.user.id,
+        email: session.user.email || null,
+      };
+    }
+  } catch (err) {
+    console.warn('[Supabase Auth Check Exception]:', err);
+  }
+
+  return { isAuthenticated: false, userId: null, email: null };
+}
+
 export const categoryService = {
   // Public active categories (ordered by displayOrder)
   async getActiveCategories(): Promise<Category[]> {
@@ -871,12 +909,14 @@ export const categoryService = {
     // 1. DIRECT SUPABASE STORAGE (When Supabase is configured)
     if (isSupabaseConfigured && supabase) {
       try {
+        const authSession = await getAuthenticatedAdminSession();
         console.log('[Supabase Category] Attempting to create category:', {
           name: rawName,
           bengali_name: bengaliName || null,
           slug,
           icon,
           description: description || null,
+          authSession,
         });
 
         // Pre-check for duplicate name
@@ -968,8 +1008,17 @@ export const categoryService = {
           let userMessage = 'ক্যাটাগরি ডাটাবেজে সংরক্ষণ করা যায়নি।';
           if (lastError?.code === '23505') {
             userMessage = `"${rawName}" নামের ক্যাটাগরি বা স্লাগ ইতিমধ্যে ডাটাবেজে বিদ্যমান।`;
-          } else if (lastError?.code === '42501' || lastError?.message?.includes('permission') || lastError?.message?.includes('policy')) {
-            userMessage = 'ডাটাবেজে ক্যাটাগরি যুক্ত করার অনুমতি নেই (RLS Policy)। অনুগ্রহ করে নিশ্চিত করুন যে আপনি অ্যাডমিন হিসেবে লগইন করেছেন।';
+          } else if (
+            lastError?.code === '42501' ||
+            lastError?.message?.includes('permission') ||
+            lastError?.message?.includes('policy') ||
+            lastError?.message?.includes('row-level security')
+          ) {
+            if (!authSession.isAuthenticated) {
+              userMessage = 'ডাটাবেজে ক্যাটাগরি যুক্ত করার অনুমতি মেলেনি (RLS Policy: 42501)। আপনার Supabase অ্যাডমিন লগইন সেশন সক্রিয় নেই। অনুগ্রহ করে অ্যাডমিন হিসেবে পুনরায় লগইন করুন।';
+            } else {
+              userMessage = `ডাটাবেজে ক্যাটাগরি যুক্ত করার অনুমতি মেলেনি (RLS Policy: 42501)। আপনার অ্যাকাউন্ট (${authSession.email || 'Admin'}) Supabase-এর 'admin_users' টেবিলে সক্রিয় অ্যাডমিন হিসেবে অনুমোদিত কিনা এবং RLS Policy কার্যকর হয়েছে কিনা যাচাই করুন।`;
+            }
           } else if (lastError?.message) {
             userMessage = `ডাটাবেজ ত্রুটি: ${lastError.message}`;
           }
@@ -1051,6 +1100,7 @@ export const categoryService = {
 
     if (isSupabaseConfigured && supabase) {
       try {
+        const authSession = await getAuthenticatedAdminSession();
         const desiredPayload: Record<string, unknown> = {
           updated_at: now,
         };
@@ -1098,7 +1148,18 @@ export const categoryService = {
 
         if (lastError || !updateData) {
           console.error('[Supabase Category Update Error]:', lastError);
-          return { success: false, error: `আপডেট ব্যর্থ হয়েছে: ${lastError?.message || 'অজানা ত্রুটি'}` };
+          let errorMsg = `আপডেট ব্যর্থ হয়েছে: ${lastError?.message || 'অজানা ত্রুটি'}`;
+          if (
+            lastError?.code === '42501' ||
+            lastError?.message?.includes('permission') ||
+            lastError?.message?.includes('policy') ||
+            lastError?.message?.includes('row-level security')
+          ) {
+            errorMsg = !authSession.isAuthenticated
+              ? 'ক্যাটাগরি আপডেট করার অনুমতি মেলেনি (RLS Policy: 42501)। অনুগ্রহ করে অ্যাডমিন হিসেবে পুনরায় লগইন করুন।'
+              : `ক্যাটাগরি আপডেট করার অনুমতি মেলেনি (RLS Policy: 42501)। আপনার অ্যাকাউন্ট (${authSession.email || 'Admin'}) admin_users টেবিলে সক্রিয় অ্যাডমিন কিনা এবং RLS Policy কার্যকর হয়েছে কিনা যাচাই করুন।`;
+          }
+          return { success: false, error: errorMsg };
         }
 
         // Cascading rename to products table
@@ -1169,6 +1230,7 @@ export const categoryService = {
     if (isSupabaseConfigured && supabase) {
       if (!unsupportedCategoryColumns.has('is_active')) {
         try {
+          const authSession = await getAuthenticatedAdminSession();
           const { error } = await supabase
             .from('categories')
             .update({ is_active: isActive })
@@ -1180,6 +1242,19 @@ export const categoryService = {
               unsupportedCategoryColumns.add('is_active');
             } else {
               console.error('[Supabase Toggle Category Error]:', error);
+              if (
+                error.code === '42501' ||
+                error.message.includes('permission') ||
+                error.message.includes('policy') ||
+                error.message.includes('row-level security')
+              ) {
+                return {
+                  success: false,
+                  error: !authSession.isAuthenticated
+                    ? 'ক্যাটাগরি স্ট্যাটাস পরিবর্তনের অনুমতি মেলেনি (RLS Policy: 42501)। অনুগ্রহ করে অ্যাডমিন হিসেবে লগইন করুন।'
+                    : `ক্যাটাগরি স্ট্যাটাস পরিবর্তনের অনুমতি মেলেনি (RLS Policy: 42501)। অ্যাকাউন্ট (${authSession.email || 'Admin'}) admin_users টেবিলে অনুমোদিত কিনা যাচাই করুন।`,
+                };
+              }
               return { success: false, error: error.message };
             }
           }
@@ -1205,6 +1280,7 @@ export const categoryService = {
     if (isSupabaseConfigured && supabase) {
       if (!unsupportedCategoryColumns.has('display_order')) {
         try {
+          await getAuthenticatedAdminSession();
           const updates = orderedIds.map((id, index) =>
             supabase
               .from('categories')
@@ -1218,6 +1294,12 @@ export const categoryService = {
               if (missingCol === 'display_order') {
                 unsupportedCategoryColumns.add('display_order');
                 break;
+              } else if (
+                res.error.code === '42501' ||
+                res.error.message.includes('permission') ||
+                res.error.message.includes('policy')
+              ) {
+                return { success: false, error: 'ক্যাটাগরি ক্রম পরিবর্তনের অনুমতি মেলেনি (RLS Policy: 42501)।' };
               }
             }
           }
@@ -1250,6 +1332,7 @@ export const categoryService = {
 
     if (isSupabaseConfigured && supabase) {
       try {
+        const authSession = await getAuthenticatedAdminSession();
         const { data: catToDelete, error: fetchErr } = await supabase
           .from('categories')
           .select('name')
@@ -1284,7 +1367,18 @@ export const categoryService = {
 
         if (deleteErr) {
           console.error('[Supabase Delete Category Error]:', deleteErr);
-          return { success: false, error: `ক্যাটাগরি ডিলিট ব্যর্থ হয়েছে: ${deleteErr.message}` };
+          let errorMsg = `ক্যাটাগরি ডিলিট ব্যর্থ হয়েছে: ${deleteErr.message}`;
+          if (
+            deleteErr.code === '42501' ||
+            deleteErr.message.includes('permission') ||
+            deleteErr.message.includes('policy') ||
+            deleteErr.message.includes('row-level security')
+          ) {
+            errorMsg = !authSession.isAuthenticated
+              ? 'ক্যাটাগরি মুছে ফেলার অনুমতি মেলেনি (RLS Policy: 42501)। অনুগ্রহ করে অ্যাডমিন হিসেবে লগইন করুন।'
+              : `ক্যাটাগরি মুছে ফেলার অনুমতি মেলেনি (RLS Policy: 42501)। আপনার অ্যাকাউন্ট (${authSession.email || 'Admin'}) admin_users টেবিলে সক্রিয় অ্যাডমিন কিনা এবং RLS Policy কার্যকর হয়েছে কিনা যাচাই করুন।`;
+          }
+          return { success: false, error: errorMsg };
         }
 
         // Local sync

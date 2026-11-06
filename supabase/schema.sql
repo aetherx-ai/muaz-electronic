@@ -59,64 +59,136 @@ CREATE TABLE IF NOT EXISTS public.store_settings (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
 );
 
--- 4. Enable Row Level Security (RLS) on all tables
+-- 4. Create admin_users table (Stores authorized administrator accounts)
+CREATE TABLE IF NOT EXISTS public.admin_users (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL UNIQUE REFERENCES auth.users(id) ON DELETE CASCADE,
+    email TEXT,
+    role TEXT NOT NULL DEFAULT 'admin',
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
+);
+
+-- Automatically register the project admin user if present in auth.users
+INSERT INTO public.admin_users (user_id, email, role, is_active)
+SELECT id, email, 'admin', true
+FROM auth.users
+WHERE email = 'itsmasud25@gmail.com'
+ON CONFLICT (user_id) DO UPDATE SET is_active = true, role = 'admin';
+
+-- 5. Helper Function: Check whether current authenticated user is an authorized admin
+-- Note: Uses SECURITY DEFINER with search_path = public to avoid RLS recursion
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+    IF auth.uid() IS NULL THEN
+        RETURN false;
+    END IF;
+
+    RETURN EXISTS (
+        SELECT 1 
+        FROM public.admin_users 
+        WHERE user_id = auth.uid() 
+          AND is_active = true
+    );
+END;
+$$;
+
+-- 6. Enable Row Level Security (RLS) on all tables
+ALTER TABLE public.admin_users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.store_settings ENABLE ROW LEVEL SECURITY;
 
--- 5. Products RLS Policies
--- Public read access: Anyone can read published products
+-- 7. admin_users RLS Policies
+-- Authenticated users can check their own admin status (needed for login verification)
+DROP POLICY IF EXISTS "Authenticated users can read their own admin status" ON public.admin_users;
+CREATE POLICY "Authenticated users can read their own admin status"
+ON public.admin_users
+FOR SELECT
+TO authenticated
+USING (user_id = auth.uid());
+
+-- 8. Products RLS Policies
+DROP POLICY IF EXISTS "Public read published products" ON public.products;
+DROP POLICY IF EXISTS "Admins can insert products" ON public.products;
+DROP POLICY IF EXISTS "Admins can update products" ON public.products;
+DROP POLICY IF EXISTS "Admins can delete products" ON public.products;
+
+-- Public can read published products; authorized admins can read all products
 CREATE POLICY "Public read published products" 
 ON public.products 
 FOR SELECT 
-USING (status = 'published' OR auth.role() = 'authenticated');
+USING (status = 'published' OR public.is_admin());
 
--- Admin full access: Only authenticated admin users can insert, update, or delete
+-- Only authorized admins can insert, update, or delete products
 CREATE POLICY "Admins can insert products" 
 ON public.products 
 FOR INSERT 
 TO authenticated 
-WITH CHECK (true);
+WITH CHECK (public.is_admin());
 
 CREATE POLICY "Admins can update products" 
 ON public.products 
 FOR UPDATE 
 TO authenticated 
-USING (true)
-WITH CHECK (true);
+USING (public.is_admin())
+WITH CHECK (public.is_admin());
 
 CREATE POLICY "Admins can delete products" 
 ON public.products 
 FOR DELETE 
 TO authenticated 
-USING (true);
+USING (public.is_admin());
 
--- 6. Categories RLS Policies
+-- 9. Categories RLS Policies
 DROP POLICY IF EXISTS "Public read categories" ON public.categories;
+DROP POLICY IF EXISTS "Public read active categories" ON public.categories;
 DROP POLICY IF EXISTS "Admins manage categories" ON public.categories;
 DROP POLICY IF EXISTS "Anon manage categories" ON public.categories;
+DROP POLICY IF EXISTS "Admins can insert categories" ON public.categories;
+DROP POLICY IF EXISTS "Admins can update categories" ON public.categories;
+DROP POLICY IF EXISTS "Admins can delete categories" ON public.categories;
+DROP POLICY IF EXISTS "Authorized admins can insert categories" ON public.categories;
+DROP POLICY IF EXISTS "Authorized admins can update categories" ON public.categories;
+DROP POLICY IF EXISTS "Authorized admins can delete categories" ON public.categories;
 
-CREATE POLICY "Public read categories" 
+-- Public visitors can read active categories; authorized admins can read all categories
+CREATE POLICY "Public read active categories" 
 ON public.categories 
 FOR SELECT 
-USING (true);
+USING (is_active = true OR public.is_admin());
 
-CREATE POLICY "Admins manage categories" 
+-- Only authenticated authorized admins can create categories
+CREATE POLICY "Authorized admins can insert categories" 
 ON public.categories 
-FOR ALL 
+FOR INSERT 
 TO authenticated 
-USING (true)
-WITH CHECK (true);
+WITH CHECK (public.is_admin());
 
--- Also allow anon role so category operations work seamlessly with the Supabase public anon key
-CREATE POLICY "Anon manage categories" 
+-- Only authenticated authorized admins can edit categories
+CREATE POLICY "Authorized admins can update categories" 
 ON public.categories 
-FOR ALL 
-TO anon 
-USING (true)
-WITH CHECK (true);
+FOR UPDATE 
+TO authenticated 
+USING (public.is_admin())
+WITH CHECK (public.is_admin());
 
--- 7. Store Settings RLS Policies
+-- Only authenticated authorized admins can delete categories
+CREATE POLICY "Authorized admins can delete categories" 
+ON public.categories 
+FOR DELETE 
+TO authenticated 
+USING (public.is_admin());
+
+-- 10. Store Settings RLS Policies
+DROP POLICY IF EXISTS "Public read store settings" ON public.store_settings;
+DROP POLICY IF EXISTS "Admins update store settings" ON public.store_settings;
+
 CREATE POLICY "Public read store settings" 
 ON public.store_settings 
 FOR SELECT 
@@ -126,8 +198,8 @@ CREATE POLICY "Admins update store settings"
 ON public.store_settings 
 FOR ALL 
 TO authenticated 
-USING (true)
-WITH CHECK (true);
+USING (public.is_admin())
+WITH CHECK (public.is_admin());
 
 -- 8. Storage bucket for product images
 -- NOTE: In Supabase Dashboard, create a public bucket named 'product-images'
