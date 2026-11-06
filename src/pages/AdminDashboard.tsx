@@ -495,7 +495,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore })
         </main>
       </div>
 
-      {/* Modals */}
       <ProductFormModal
         isOpen={isFormModalOpen}
         onClose={() => {
@@ -506,6 +505,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore })
         productToEdit={editingProduct}
         categories={categories}
         onAddCategory={handleAddCategory}
+        onNavigateTab={(tab) => {
+          setIsFormModalOpen(false);
+          setEditingProduct(null);
+          setCurrentTab(tab);
+        }}
+        onBackToStore={onBackToStore}
       />
 
       <DeleteConfirmModal
