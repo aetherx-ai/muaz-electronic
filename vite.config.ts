@@ -15,7 +15,7 @@ export default defineConfig(() => {
           server.middlewares.use((req, res, next) => {
             const cleanUrl = req.url ? req.url.split('?')[0] : '';
             if (cleanUrl === '/googlee056a2025a729431.html') {
-              const filePath = path.resolve(__dirname, 'public/googlee056a2025a729431.html');
+              const filePath = path.resolve(import.meta.dirname || '.', 'public/googlee056a2025a729431.html');
               if (fs.existsSync(filePath)) {
                 res.statusCode = 200;
                 res.setHeader('Content-Type', 'text/html; charset=utf-8');
@@ -30,7 +30,7 @@ export default defineConfig(() => {
     ],
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, '.'),
+        '@': path.resolve(import.meta.dirname || '.', '.'),
       },
     },
     server: {

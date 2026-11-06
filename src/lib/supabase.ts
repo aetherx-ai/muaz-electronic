@@ -679,6 +679,17 @@ function isBase64Image(value: string | undefined): boolean {
 // -----------------------------------------------------------------------------
 // DYNAMIC CATEGORY SERVICE (Permanent Database & Supabase Integration)
 // -----------------------------------------------------------------------------
+export function generateCategorySlug(name: string): string {
+  if (!name) return `cat-${Date.now()}`;
+  const cleaned = name
+    .toLowerCase()
+    .trim()
+    .replace(/[^\w\s-]/g, '')
+    .replace(/[\s_-]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return cleaned || `cat-${Date.now()}`;
+}
+
 export const categoryService = {
   // Public active categories (ordered by displayOrder)
   async getActiveCategories(): Promise<Category[]> {
