@@ -755,7 +755,25 @@ export const categoryService = {
     // 1. When Supabase is configured, execute on Supabase first
     if (isSupabaseConfigured && supabase) {
       try {
+        // Ensure active authenticated session before issuing protected mutation
+        const { data: sessionData } = await supabase.auth.getSession();
+        let activeUser = sessionData?.session?.user;
+
+        if (!activeUser) {
+          const { data: refreshed } = await supabase.auth.refreshSession();
+          activeUser = refreshed?.session?.user;
+        }
+
+        if (!activeUser) {
+          return {
+            success: false,
+            error: 'সক্রিয় অ্যাডমিন সেশন পাওয়া যায়নি। দয়া করে আবার লগইন করুন।',
+          };
+        }
+
+        const categoryId = payload.id || (slug.startsWith('cat-') ? slug : `cat-${slug}`);
         const insertPayload = {
+          id: categoryId,
           name: trimmedName,
           bengali_name: payload.bengaliName?.trim() || null,
           slug,

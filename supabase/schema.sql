@@ -21,22 +21,31 @@ CREATE INDEX IF NOT EXISTS idx_admin_users_is_active ON public.admin_users(is_ac
 -- Defined as SECURITY DEFINER with fixed search_path to prevent recursion and privilege issues.
 CREATE OR REPLACE FUNCTION public.is_admin()
 RETURNS BOOLEAN
-LANGUAGE sql
+LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, auth, pg_temp
 STABLE
 AS $$
-  SELECT EXISTS (
-    SELECT 1 
-    FROM public.admin_users 
-    WHERE user_id = auth.uid() 
-      AND is_active = true
-  );
+DECLARE
+    _current_uid UUID;
+    _is_active BOOLEAN;
+BEGIN
+    _current_uid := auth.uid();
+    IF _current_uid IS NULL THEN
+        RETURN FALSE;
+    END IF;
+
+    SELECT is_active INTO _is_active
+    FROM public.admin_users
+    WHERE user_id = _current_uid
+    LIMIT 1;
+
+    RETURN COALESCE(_is_active, FALSE);
+END;
 $$;
 
--- Grant execution to authenticated and anon roles
-GRANT EXECUTE ON FUNCTION public.is_admin() TO authenticated;
-GRANT EXECUTE ON FUNCTION public.is_admin() TO anon;
+REVOKE ALL ON FUNCTION public.is_admin() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.is_admin() TO authenticated, anon;
 
 -- -----------------------------------------------------------------------------
 -- 2. CATEGORIES TABLE

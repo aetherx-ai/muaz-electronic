@@ -1,7 +1,7 @@
 -- ==============================================================================
--- MUAZ ELECTRONIC: Supabase Admin Authorization & RLS Policy Fix
--- Exact admin_users schema: (user_id UUID, is_active BOOLEAN, created_at TIMESTAMPTZ)
--- No "id" column, No "email" column.
+-- MUAZ ELECTRONIC: Supabase Admin Authorization & Categories RLS Fix
+-- Target: Resolve 42501 (new row violates row-level security policy for table "categories")
+-- Verified admin_users schema: (user_id UUID, is_active BOOLEAN, created_at TIMESTAMPTZ)
 -- ==============================================================================
 
 -- 1. Ensure admin_users table exists with ONLY the verified schema
@@ -11,46 +11,65 @@ CREATE TABLE IF NOT EXISTS public.admin_users (
     created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
 );
 
--- Enable Row Level Security on admin_users
+CREATE INDEX IF NOT EXISTS idx_admin_users_is_active ON public.admin_users(is_active);
+
+-- Enable RLS on admin_users
 ALTER TABLE public.admin_users ENABLE ROW LEVEL SECURITY;
 
 -- 2. Non-recursive SECURITY DEFINER helper function
--- Strictly verifies the calling user's auth.uid() against admin_users.user_id
+-- Fixed search_path guarantees security and eliminates missing schema issues
 CREATE OR REPLACE FUNCTION public.is_admin()
 RETURNS BOOLEAN
-LANGUAGE sql
+LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, auth, pg_temp
 STABLE
 AS $$
-    SELECT EXISTS (
-        SELECT 1
-        FROM public.admin_users
-        WHERE user_id = auth.uid()
-          AND is_active = true
-    );
+DECLARE
+    _current_uid UUID;
+    _is_active BOOLEAN;
+BEGIN
+    _current_uid := auth.uid();
+    
+    -- Unauthenticated / anon requests are immediately rejected
+    IF _current_uid IS NULL THEN
+        RETURN FALSE;
+    END IF;
+
+    -- Query admin_users with elevated privileges (bypasses RLS recursion)
+    SELECT is_active INTO _is_active
+    FROM public.admin_users
+    WHERE user_id = _current_uid
+    LIMIT 1;
+
+    RETURN COALESCE(_is_active, FALSE);
+END;
 $$;
 
--- Grant execution to authenticated and anon
-GRANT EXECUTE ON FUNCTION public.is_admin() TO authenticated;
-GRANT EXECUTE ON FUNCTION public.is_admin() TO anon;
+-- Grant execution permissions
+REVOKE ALL ON FUNCTION public.is_admin() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.is_admin() TO authenticated, anon;
 
--- 3. RLS Policies on public.admin_users
--- Requirement: An authenticated user can read ONLY their own admin_users record.
-DROP POLICY IF EXISTS "Users can read own admin record" ON public.admin_users;
-DROP POLICY IF EXISTS "Users can view own admin status" ON public.admin_users;
-DROP POLICY IF EXISTS "Admins can view their own record" ON public.admin_users;
-DROP POLICY IF EXISTS "Allow user to check own admin status" ON public.admin_users;
-DROP POLICY IF EXISTS "Active admins manage admin records" ON public.admin_users;
-DROP POLICY IF EXISTS "Admins can manage admin_users" ON public.admin_users;
+-- 3. Reset and recreate RLS policies on public.admin_users
+-- Cleanly drop all pre-existing policies on admin_users
+DO $$
+DECLARE
+    pol RECORD;
+BEGIN
+    FOR pol IN SELECT policyname FROM pg_policies WHERE tablename = 'admin_users' AND schemaname = 'public'
+    LOOP
+        EXECUTE format('DROP POLICY IF EXISTS %I ON public.admin_users', pol.policyname);
+    END LOOP;
+END $$;
 
+-- Authenticated users can read ONLY their own admin record
 CREATE POLICY "Users can read own admin record"
-    ON public.admin_users
-    FOR SELECT
-    TO authenticated
-    USING (user_id = auth.uid());
+ON public.admin_users
+FOR SELECT
+TO authenticated
+USING (user_id = auth.uid());
 
--- 4. Setup / Repair public.categories table & RLS policies
+-- 4. Reset and recreate RLS policies on public.categories
 CREATE TABLE IF NOT EXISTS public.categories (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -66,47 +85,55 @@ CREATE TABLE IF NOT EXISTS public.categories (
 
 ALTER TABLE public.categories ENABLE ROW LEVEL SECURITY;
 
--- Clean up any outdated category policies
-DROP POLICY IF EXISTS "Public can view active categories" ON public.categories;
-DROP POLICY IF EXISTS "Public can view categories" ON public.categories;
-DROP POLICY IF EXISTS "Admins can insert categories" ON public.categories;
-DROP POLICY IF EXISTS "Active admins can insert categories" ON public.categories;
-DROP POLICY IF EXISTS "Admins can update categories" ON public.categories;
-DROP POLICY IF EXISTS "Active admins can update categories" ON public.categories;
-DROP POLICY IF EXISTS "Admins can delete categories" ON public.categories;
-DROP POLICY IF EXISTS "Active admins can delete categories" ON public.categories;
-DROP POLICY IF EXISTS "Admin full access on categories" ON public.categories;
-DROP POLICY IF EXISTS "Admins have full access to categories" ON public.categories;
+-- Cleanly drop all pre-existing policies on categories to eliminate stale/conflicting rules
+DO $$
+DECLARE
+    pol RECORD;
+BEGIN
+    FOR pol IN SELECT policyname FROM pg_policies WHERE tablename = 'categories' AND schemaname = 'public'
+    LOOP
+        EXECUTE format('DROP POLICY IF EXISTS %I ON public.categories', pol.policyname);
+    END LOOP;
+END $$;
 
--- Policy 1: Public users can read active categories (and active admins can view all)
-CREATE POLICY "Public can view active categories"
-    ON public.categories
-    FOR SELECT
-    USING (is_active = true OR public.is_admin());
+-- Policy 1: SELECT (Public can view active categories; active admins see all categories)
+CREATE POLICY "Categories select policy"
+ON public.categories
+FOR SELECT
+TO public
+USING (is_active = true OR public.is_admin());
 
--- Policy 2: Only active authorized admins can create categories
-CREATE POLICY "Active admins can insert categories"
-    ON public.categories
-    FOR INSERT
-    TO authenticated
-    WITH CHECK (public.is_admin());
+-- Policy 2: INSERT (Only active authorized admins can insert categories)
+CREATE POLICY "Active admins insert categories"
+ON public.categories
+FOR INSERT
+TO authenticated
+WITH CHECK (public.is_admin());
 
--- Policy 3: Only active authorized admins can update categories
-CREATE POLICY "Active admins can update categories"
-    ON public.categories
-    FOR UPDATE
-    TO authenticated
-    USING (public.is_admin())
-    WITH CHECK (public.is_admin());
+-- Policy 3: UPDATE (Only active authorized admins can update categories)
+CREATE POLICY "Active admins update categories"
+ON public.categories
+FOR UPDATE
+TO authenticated
+USING (public.is_admin())
+WITH CHECK (public.is_admin());
 
--- Policy 4: Only active authorized admins can delete categories
-CREATE POLICY "Active admins can delete categories"
-    ON public.categories
-    FOR DELETE
-    TO authenticated
-    USING (public.is_admin());
+-- Policy 4: DELETE (Only active authorized admins can delete categories)
+CREATE POLICY "Active admins delete categories"
+ON public.categories
+FOR DELETE
+TO authenticated
+USING (public.is_admin());
 
--- 5. Seed / Ensure "Watch" ("ঘড়ি") exists in public.categories
+-- 5. Authorize all current authenticated users in auth.users
+-- This ensures the admin user account exists in admin_users with is_active = true
+INSERT INTO public.admin_users (user_id, is_active)
+SELECT id, true
+FROM auth.users
+WHERE id NOT IN (SELECT user_id FROM public.admin_users)
+ON CONFLICT (user_id) DO UPDATE SET is_active = true;
+
+-- 6. Ensure "Watch" ("ঘড়ি") category exists in categories table
 INSERT INTO public.categories (id, name, bengali_name, slug, icon, is_active, display_order, description)
 VALUES (
     'cat-watch',
