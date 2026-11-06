@@ -18,6 +18,7 @@ import {
 import { Category, Product } from '../../types';
 import { renderCategoryIcon } from '../../lib/categoryIcons';
 import { generateCategorySlug } from '../../lib/supabase';
+import { matchesCategoryFilter } from '../../lib/categoryUtils';
 import { CategoryFormModal } from './CategoryFormModal';
 import { CategoryDeleteModal } from './CategoryDeleteModal';
 
@@ -77,7 +78,7 @@ export const CategoryManagementTab: React.FC<CategoryManagementTabProps> = ({
 
   // Compute products per category
   const categoriesWithLiveCounts = categories.map((cat) => {
-    const count = products.filter((p) => p.category === cat.name).length;
+    const count = products.filter((p) => matchesCategoryFilter(p.category, cat.name, [cat])).length;
     return {
       ...cat,
       productCount: count,

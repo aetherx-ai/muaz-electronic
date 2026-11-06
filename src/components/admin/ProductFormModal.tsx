@@ -54,6 +54,11 @@ import {
 } from 'lucide-react';
 import { Product, ProductStatus, Category } from '../../types';
 import { AdminTab } from './AdminSidebar';
+import {
+  getCategorySelectOptions,
+  getCanonicalCategoryName,
+  findCategoryMatch,
+} from '../../lib/categoryUtils';
 
 interface ProductFormModalProps {
   isOpen: boolean;
@@ -180,17 +185,9 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
     if (productToEdit) {
       setName(productToEdit.name || '');
       setBengaliName(productToEdit.bengaliName || '');
-      setPrice(productToEdit.price || '');
       const existingCat = productToEdit.category || '';
-      const matchedCat = categories.find(
-        (c) =>
-          typeof c !== 'string' &&
-          (c.name.trim().toLowerCase() === existingCat.trim().toLowerCase() ||
-            c.id === existingCat ||
-            c.slug === existingCat ||
-            (c.bengaliName && c.bengaliName.trim().toLowerCase() === existingCat.trim().toLowerCase()))
-      ) as Category | undefined;
-      setCategory(matchedCat ? matchedCat.name : existingCat);
+      const canonicalCat = getCanonicalCategoryName(existingCat, categories);
+      setCategory(canonicalCat || existingCat);
       setBrand(productToEdit.brand || 'MUAZ ELECTRONIC');
       setStock(typeof productToEdit.stock === 'number' ? productToEdit.stock : 20);
       setStatus(productToEdit.status || 'published');
@@ -609,18 +606,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
       });
     }
 
-    const matchedCategory = categories.find(
-      (c) =>
-        typeof c !== 'string' &&
-        (c.name.trim().toLowerCase() === category.trim().toLowerCase() ||
-          c.id === category ||
-          c.slug === category ||
-          (c.bengaliName && c.bengaliName.trim().toLowerCase() === category.trim().toLowerCase()))
-    ) as Category | undefined;
-
-    const finalCategoryName = (matchedCategory && typeof matchedCategory !== 'string')
-      ? matchedCategory.name
-      : category.trim();
+    const finalCategoryName = getCanonicalCategoryName(category, categories) || category.trim();
 
     const primaryImg = activeHeroImage;
     const primaryFile = imageFiles[primaryImageIndex] || imageFiles[0];
@@ -2126,28 +2112,14 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                       >
                         {!category && (
                           <option value="" disabled className="text-slate-400">
-                            -- Select Category --
+                            -- Select Category (ক্যাটাগরি নির্বাচন করুন) --
                           </option>
                         )}
-                        {Array.from(
-                          new Set([
-                            ...categories
-                              .map((c) => (typeof c === 'string' ? c : c.name))
-                              .filter((c) => c && c.trim() !== 'All Products' && c.trim() !== 'All'),
-                            ...(category && category.trim() !== 'All Products' ? [category] : []),
-                          ])
-                        ).map((catName) => {
-                          const matchedCat = categories.find(
-                            (c) =>
-                              typeof c !== 'string' &&
-                              c.name.trim().toLowerCase() === catName.trim().toLowerCase()
-                          ) as Category | undefined;
-                          return (
-                            <option key={catName} value={catName}>
-                              {catName} {matchedCat?.bengaliName ? `(${matchedCat.bengaliName})` : ''}
-                            </option>
-                          );
-                        })}
+                        {getCategorySelectOptions(categories, category).map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
                       </select>
                       <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
                         <Layers className="w-4 h-4" />

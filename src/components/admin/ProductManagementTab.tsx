@@ -20,6 +20,11 @@ import {
   Percent,
 } from 'lucide-react';
 import { Product, ProductStatus, Category } from '../../types';
+import {
+  matchesCategoryFilter,
+  getCategorySelectOptions,
+  getCategoryDisplayLabel,
+} from '../../lib/categoryUtils';
 
 interface ProductManagementTabProps {
   products: Product[];
@@ -66,7 +71,7 @@ export const ProductManagementTab: React.FC<ProductManagementTabProps> = ({
     return products
       .filter((p) => {
         // Category filter
-        if (selectedCategory !== 'All' && p.category !== selectedCategory) {
+        if (selectedCategory !== 'All' && !matchesCategoryFilter(p.category, selectedCategory, categories)) {
           return false;
         }
 
@@ -184,18 +189,11 @@ export const ProductManagementTab: React.FC<ProductManagementTabProps> = ({
               className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:border-slate-900 focus:bg-white transition-colors cursor-pointer"
             >
               <option value="All">সকল ক্যাটাগরি (All Categories)</option>
-              {categoryNames.map((cat) => {
-                const matchedCat = categories.find(
-                  (c) =>
-                    typeof c !== 'string' &&
-                    c.name.trim().toLowerCase() === cat.trim().toLowerCase()
-                ) as Category | undefined;
-                return (
-                  <option key={cat} value={cat}>
-                    {cat} {matchedCat?.bengaliName ? `(${matchedCat.bengaliName})` : ''}
-                  </option>
-                );
-              })}
+              {getCategorySelectOptions(categories).map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -313,8 +311,11 @@ export const ProductManagementTab: React.FC<ProductManagementTabProps> = ({
 
                       {/* Category */}
                       <td className="py-3.5 px-4 text-slate-600">
-                        <span className="px-2.5 py-1 bg-slate-100 text-slate-800 rounded-lg text-[11px] font-medium border border-slate-200/60 inline-block truncate max-w-[140px]">
-                          {p.category}
+                        <span
+                          className="px-2.5 py-1 bg-slate-100 text-slate-800 rounded-lg text-[11px] font-medium border border-slate-200/60 inline-block truncate max-w-[160px]"
+                          title={getCategoryDisplayLabel(p.category, categories)}
+                        >
+                          {getCategoryDisplayLabel(p.category, categories)}
                         </span>
                       </td>
 

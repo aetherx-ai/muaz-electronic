@@ -3,6 +3,7 @@ import { Search, ArrowRight, X, SlidersHorizontal } from 'lucide-react';
 import { ProductCard } from './ProductCard';
 import { Product, Category } from '../types';
 import { renderCategoryIcon } from '../lib/categoryIcons';
+import { matchesCategoryFilter } from '../lib/categoryUtils';
 
 interface ProductCatalogProps {
   products: Product[];
@@ -35,11 +36,12 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
   // Catalog Products with category filter, search, and sorting
   const filteredProducts = useMemo(() => {
     return products.filter((product) => {
-      // Dynamic category match
-      const matchesCategory =
-        selectedCategory === 'All Products' ||
-        product.category === selectedCategory ||
-        product.category.toLowerCase() === selectedCategory.toLowerCase();
+      // Dynamic category match using unified category matcher
+      const matchesCategory = matchesCategoryFilter(
+        product.category,
+        selectedCategory,
+        categories
+      );
 
       // Search match
       const query = searchQuery.trim().toLowerCase();

@@ -709,7 +709,18 @@ export const categoryService = {
           const prods = prodsRes.data || [];
           return catsRes.data.map((row) => {
             const cat = mapDbCategoryToCategory(row);
-            cat.productCount = prods.filter((p) => p.category === cat.name).length;
+            const catNameLower = cat.name.trim().toLowerCase();
+            const catSlugLower = (cat.slug || '').trim().toLowerCase();
+            const catBengaliLower = (cat.bengaliName || '').trim().toLowerCase();
+            cat.productCount = prods.filter((p) => {
+              const pCat = (p.category || '').trim().toLowerCase();
+              return (
+                pCat === catNameLower ||
+                (catSlugLower && pCat === catSlugLower) ||
+                (catBengaliLower && pCat === catBengaliLower) ||
+                pCat === cat.id.toLowerCase()
+              );
+            }).length;
             return cat;
           });
         }
