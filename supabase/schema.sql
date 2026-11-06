@@ -8,18 +8,13 @@
 -- -----------------------------------------------------------------------------
 -- 1. ADMIN USERS TABLE & AUTHORIZATION
 -- -----------------------------------------------------------------------------
+-- Exact verified schema: user_id (UUID), is_active (BOOLEAN), created_at (TIMESTAMPTZ)
 CREATE TABLE IF NOT EXISTS public.admin_users (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL UNIQUE REFERENCES auth.users(id) ON DELETE CASCADE,
-    email TEXT NOT NULL,
-    role TEXT NOT NULL DEFAULT 'admin',
+    user_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
     is_active BOOLEAN NOT NULL DEFAULT true,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
+    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
 );
 
-CREATE INDEX IF NOT EXISTS idx_admin_users_user_id ON public.admin_users(user_id);
-CREATE INDEX IF NOT EXISTS idx_admin_users_email ON public.admin_users(email);
 CREATE INDEX IF NOT EXISTS idx_admin_users_is_active ON public.admin_users(is_active);
 
 -- Helper Function: Check if the calling authenticated user is an active admin.
@@ -42,46 +37,6 @@ $$;
 -- Grant execution to authenticated and anon roles
 GRANT EXECUTE ON FUNCTION public.is_admin() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.is_admin() TO anon;
-
--- Auto-sync Trigger: When designated admin (kl6544340@gmail.com) is in auth.users,
--- automatically ensure they are registered and marked active in public.admin_users.
-CREATE OR REPLACE FUNCTION public.handle_admin_auth_sync()
-RETURNS TRIGGER AS $$
-BEGIN
-  IF LOWER(NEW.email) = 'kl6544340@gmail.com' THEN
-    INSERT INTO public.admin_users (user_id, email, role, is_active)
-    VALUES (NEW.id, NEW.email, 'admin', true)
-    ON CONFLICT (user_id) DO UPDATE SET
-      is_active = true,
-      email = EXCLUDED.email,
-      role = 'admin',
-      updated_at = timezone('utc'::text, now());
-  END IF;
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
-DROP TRIGGER IF EXISTS on_auth_user_admin_sync ON auth.users;
-CREATE TRIGGER on_auth_user_admin_sync
-  AFTER INSERT OR UPDATE OF email ON auth.users
-  FOR EACH ROW
-  EXECUTE FUNCTION public.handle_admin_auth_sync();
-
--- Seed existing kl6544340@gmail.com if already present in auth.users
-DO $$
-BEGIN
-  IF EXISTS (SELECT 1 FROM auth.users WHERE LOWER(email) = 'kl6544340@gmail.com') THEN
-    INSERT INTO public.admin_users (user_id, email, role, is_active)
-    SELECT id, email, 'admin', true
-    FROM auth.users
-    WHERE LOWER(email) = 'kl6544340@gmail.com'
-    ON CONFLICT (user_id) DO UPDATE SET
-      is_active = true,
-      email = EXCLUDED.email,
-      role = 'admin',
-      updated_at = timezone('utc'::text, now());
-  END IF;
-END $$;
 
 -- -----------------------------------------------------------------------------
 -- 2. CATEGORIES TABLE
@@ -157,23 +112,16 @@ ALTER TABLE public.store_settings ENABLE ROW LEVEL SECURITY;
 -- -----------------------------------------------------------------------------
 -- 5A. ADMIN_USERS RLS POLICIES
 -- -----------------------------------------------------------------------------
+DROP POLICY IF EXISTS "Users can read own admin record" ON public.admin_users;
 DROP POLICY IF EXISTS "Users can view own admin status" ON public.admin_users;
 DROP POLICY IF EXISTS "Admins can manage admin_users" ON public.admin_users;
 
--- Authenticated users can read their own admin record to verify session
-CREATE POLICY "Users can view own admin status"
+-- Authenticated users can read only their own admin record
+CREATE POLICY "Users can read own admin record"
 ON public.admin_users
 FOR SELECT
 TO authenticated
-USING (user_id = auth.uid() OR public.is_admin());
-
--- Only active admins can manage admin_users records
-CREATE POLICY "Admins can manage admin_users"
-ON public.admin_users
-FOR ALL
-TO authenticated
-USING (public.is_admin())
-WITH CHECK (public.is_admin());
+USING (user_id = auth.uid());
 
 -- -----------------------------------------------------------------------------
 -- 5B. CATEGORIES RLS POLICIES
@@ -349,11 +297,5 @@ CREATE TRIGGER on_categories_updated
 DROP TRIGGER IF EXISTS on_products_updated ON public.products;
 CREATE TRIGGER on_products_updated
     BEFORE UPDATE ON public.products
-    FOR EACH ROW
-    EXECUTE FUNCTION public.handle_updated_at();
-
-DROP TRIGGER IF EXISTS on_admin_users_updated ON public.admin_users;
-CREATE TRIGGER on_admin_users_updated
-    BEFORE UPDATE ON public.admin_users
     FOR EACH ROW
     EXECUTE FUNCTION public.handle_updated_at();

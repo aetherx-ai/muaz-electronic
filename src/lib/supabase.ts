@@ -213,32 +213,13 @@ export const authService = {
         };
       }
 
-      // Verify the authenticated user against the admin allowlist.
-      let { data: admin, error: adminError } = await supabase
+      // Verify the authenticated user against the admin allowlist using exact schema: user_id, is_active
+      const { data: admin, error: adminError } = await supabase
         .from('admin_users')
-        .select('user_id, is_active, email')
+        .select('user_id, is_active')
         .eq('user_id', data.user.id)
         .eq('is_active', true)
         .maybeSingle();
-
-      // If not yet mapped by user_id, check by verified email and link user_id
-      if (!admin && data.user.email) {
-        const { data: adminByEmail } = await supabase
-          .from('admin_users')
-          .select('id, user_id, is_active, email')
-          .ilike('email', data.user.email.trim())
-          .eq('is_active', true)
-          .maybeSingle();
-
-        if (adminByEmail) {
-          await supabase
-            .from('admin_users')
-            .update({ user_id: data.user.id, updated_at: new Date().toISOString() })
-            .eq('id', adminByEmail.id);
-          admin = { user_id: data.user.id, is_active: true, email: data.user.email };
-          adminError = null;
-        }
-      }
 
       if (adminError || !admin) {
         await supabase.auth.signOut();
@@ -309,30 +290,12 @@ export const authService = {
 
       const authUser = data.session.user;
 
-      let { data: admin, error: adminError } = await supabase
+      const { data: admin, error: adminError } = await supabase
         .from('admin_users')
-        .select('user_id, is_active, email')
+        .select('user_id, is_active')
         .eq('user_id', authUser.id)
         .eq('is_active', true)
         .maybeSingle();
-
-      if (!admin && authUser.email) {
-        const { data: adminByEmail } = await supabase
-          .from('admin_users')
-          .select('id, user_id, is_active, email')
-          .ilike('email', authUser.email.trim())
-          .eq('is_active', true)
-          .maybeSingle();
-
-        if (adminByEmail) {
-          await supabase
-            .from('admin_users')
-            .update({ user_id: authUser.id, updated_at: new Date().toISOString() })
-            .eq('id', adminByEmail.id);
-          admin = { user_id: authUser.id, is_active: true, email: authUser.email };
-          adminError = null;
-        }
-      }
 
       if (adminError || !admin) {
         await supabase.auth.signOut();
@@ -814,7 +777,7 @@ export const categoryService = {
           if (error.code === '42501') {
             return {
               success: false,
-              error: 'ডাটাবেজে ক্যাটাগরি যুক্ত করার অনুমতি মেলেনি (RLS Policy: 42501)। আপনার অ্যাকাউন্ট (kl6544340@gmail.com) Supabase-এর \'admin_users\' টেবিলে সক্রিয় অ্যাডমিন হিসেবে অনুমোদিত কিনা এবং RLS Policy কার্যকর হয়েছে কিনা যাচাই করুন।',
+              error: 'ডাটাবেজে ক্যাটাগরি যুক্ত করার অনুমতি মেলেনি (RLS Policy: 42501)। আপনার অ্যাকাউন্টটি Supabase-এর \'admin_users\' টেবিলে সক্রিয় অ্যাডমিন (is_active = true) হিসেবে অনুমোদিত কিনা এবং RLS Policy কার্যকর হয়েছে কিনা যাচাই করুন।',
             };
           }
           if (error.code === '23505') {
