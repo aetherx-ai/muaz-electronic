@@ -214,12 +214,31 @@ export const authService = {
       }
 
       // Verify the authenticated user against the admin allowlist.
-      const { data: admin, error: adminError } = await supabase
+      let { data: admin, error: adminError } = await supabase
         .from('admin_users')
-        .select('user_id, is_active')
+        .select('user_id, is_active, email')
         .eq('user_id', data.user.id)
         .eq('is_active', true)
         .maybeSingle();
+
+      // If not yet mapped by user_id, check by verified email and link user_id
+      if (!admin && data.user.email) {
+        const { data: adminByEmail } = await supabase
+          .from('admin_users')
+          .select('id, user_id, is_active, email')
+          .ilike('email', data.user.email.trim())
+          .eq('is_active', true)
+          .maybeSingle();
+
+        if (adminByEmail) {
+          await supabase
+            .from('admin_users')
+            .update({ user_id: data.user.id, updated_at: new Date().toISOString() })
+            .eq('id', adminByEmail.id);
+          admin = { user_id: data.user.id, is_active: true, email: data.user.email };
+          adminError = null;
+        }
+      }
 
       if (adminError || !admin) {
         await supabase.auth.signOut();
@@ -290,12 +309,30 @@ export const authService = {
 
       const authUser = data.session.user;
 
-      const { data: admin, error: adminError } = await supabase
+      let { data: admin, error: adminError } = await supabase
         .from('admin_users')
-        .select('user_id, is_active')
+        .select('user_id, is_active, email')
         .eq('user_id', authUser.id)
         .eq('is_active', true)
         .maybeSingle();
+
+      if (!admin && authUser.email) {
+        const { data: adminByEmail } = await supabase
+          .from('admin_users')
+          .select('id, user_id, is_active, email')
+          .ilike('email', authUser.email.trim())
+          .eq('is_active', true)
+          .maybeSingle();
+
+        if (adminByEmail) {
+          await supabase
+            .from('admin_users')
+            .update({ user_id: authUser.id, updated_at: new Date().toISOString() })
+            .eq('id', adminByEmail.id);
+          admin = { user_id: authUser.id, is_active: true, email: authUser.email };
+          adminError = null;
+        }
+      }
 
       if (adminError || !admin) {
         await supabase.auth.signOut();
@@ -640,204 +677,42 @@ function isBase64Image(value: string | undefined): boolean {
 }
 
 // -----------------------------------------------------------------------------
-// DYNAMIC CATEGORY HELPERS & SERVICE (Supabase Integration)
+// DYNAMIC CATEGORY SERVICE (Permanent Database & Supabase Integration)
 // -----------------------------------------------------------------------------
-export function generateCategorySlug(name: string, fallbackId?: string): string {
-  const clean = name
-    .toLowerCase()
-    .trim()
-    .replace(/&/g, '-and-')
-    .replace(/[^\p{L}\p{M}\p{N}]+/gu, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-+|-+$/g, '');
-
-  if (clean.length > 0) {
-    return clean;
-  }
-  return `cat-${fallbackId || Date.now()}`;
-}
-
-export function getLocalDetailedCategories(): Category[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEYS.CATEGORIES);
-    if (!raw) {
-      localStorage.setItem(
-        STORAGE_KEYS.CATEGORIES,
-        JSON.stringify(INITIAL_DETAILED_CATEGORIES)
-      );
-      return INITIAL_DETAILED_CATEGORIES;
-    }
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed) && parsed.length > 0 && typeof parsed[0] === 'object') {
-      return parsed as Category[];
-    }
-    if (Array.isArray(parsed)) {
-      const converted: Category[] = parsed.map((name: string, i: number) => ({
-        id: `cat-${i + 1}`,
-        name,
-        slug: generateCategorySlug(name, String(i + 1)),
-        icon: 'Layers',
-        isActive: true,
-        displayOrder: i + 1,
-      }));
-      localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(converted));
-      return converted;
-    }
-    return INITIAL_DETAILED_CATEGORIES;
-  } catch (error) {
-    console.error('Error reading local categories:', error);
-    return INITIAL_DETAILED_CATEGORIES;
-  }
-}
-
-export function saveLocalDetailedCategories(categories: Category[]): void {
-  try {
-    localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(categories));
-  } catch (error) {
-    console.error('Error saving local categories:', error);
-  }
-}
-
-// -----------------------------------------------------------------------------
-// DYNAMIC CATEGORY HELPERS & SCHEMA-ADAPTIVE ENGINE
-// -----------------------------------------------------------------------------
-let detectedCategoryColumns: Set<string> | null = null;
-const unsupportedCategoryColumns = new Set<string>();
-
-export function extractMissingColumnName(errorMessage?: string): string | null {
-  if (!errorMessage) return null;
-
-  // PostgREST: Could not find the 'xyz' column of 'categories' in the schema cache
-  const match1 = errorMessage.match(/Could not find the '([^']+)' column/i);
-  if (match1 && match1[1]) return match1[1].trim();
-
-  // PostgreSQL: column "xyz" of relation "categories" does not exist
-  const match2 = errorMessage.match(/column ["']?([a-zA-Z0-9_]+)["']? of relation/i);
-  if (match2 && match2[1]) return match2[1].trim();
-
-  // PostgreSQL: column categories.xyz does not exist
-  const match3 = errorMessage.match(/column [a-zA-Z0-9_]+\.([a-zA-Z0-9_]+) does not exist/i);
-  if (match3 && match3[1]) return match3[1].trim();
-
-  return null;
-}
-
-function updateDetectedColumns(rows: any[]) {
-  if (rows && rows.length > 0 && !detectedCategoryColumns) {
-    const cols = Object.keys(rows[0]);
-    detectedCategoryColumns = new Set(cols);
-    console.log('[Supabase Category Schema Auto-Detected]: Present columns in DB:', cols);
-  }
-}
-
-function buildSafeCategoryDbPayload(
-  desiredPayload: Record<string, unknown>
-): Record<string, unknown> {
-  const safe: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(desiredPayload)) {
-    // If dynamically found to be unsupported, skip sending
-    if (unsupportedCategoryColumns.has(key)) continue;
-
-    // If we have verified the exact column set from DB and this column is absent, skip sending
-    if (detectedCategoryColumns && !detectedCategoryColumns.has(key)) continue;
-
-    safe[key] = value;
-  }
-  return safe;
-}
-
-async function fetchSupabaseCategories(onlyActive = false): Promise<any[]> {
-  if (!isSupabaseConfigured || !supabase) return [];
-
-  try {
-    let query = supabase.from('categories').select('*');
-
-    if (onlyActive && !unsupportedCategoryColumns.has('is_active')) {
-      query = query.eq('is_active', true);
-    }
-
-    if (!unsupportedCategoryColumns.has('display_order')) {
-      query = query.order('display_order', { ascending: true });
-    }
-
-    const res = await query;
-
-    if (res.error) {
-      console.warn('[Supabase Category Query Warning]:', res.error.message);
-      const missingCol = extractMissingColumnName(res.error.message);
-      if (missingCol) {
-        unsupportedCategoryColumns.add(missingCol);
-      }
-
-      // Safe fallback: standard select without filters or ordering that may fail
-      const fallbackRes = await supabase.from('categories').select('*');
-      if (!fallbackRes.error && fallbackRes.data) {
-        updateDetectedColumns(fallbackRes.data);
-        return fallbackRes.data;
-      }
-      return [];
-    }
-
-    if (res.data && Array.isArray(res.data)) {
-      updateDetectedColumns(res.data);
-      return res.data;
-    }
-  } catch (err) {
-    console.error('[Supabase Category Fetch Exception]:', err);
-  }
-
-  return [];
-}
-
-/**
- * Verify and refresh the current Supabase auth session.
- * Ensures mutations carry a valid, unexpired Bearer token for RLS evaluation.
- */
-export async function getAuthenticatedAdminSession(): Promise<{
-  isAuthenticated: boolean;
-  userId: string | null;
-  email: string | null;
-}> {
-  if (!isSupabaseConfigured || !supabase) {
-    return { isAuthenticated: false, userId: null, email: null };
-  }
-
-  try {
-    const { data: sessionData, error: sessionErr } = await supabase.auth.getSession();
-    let session = sessionData?.session;
-
-    if (!session || sessionErr) {
-      const { data: refreshData, error: refreshErr } = await supabase.auth.refreshSession();
-      if (!refreshErr && refreshData?.session) {
-        session = refreshData.session;
-      }
-    }
-
-    if (session?.user) {
-      return {
-        isAuthenticated: true,
-        userId: session.user.id,
-        email: session.user.email || null,
-      };
-    }
-  } catch (err) {
-    console.warn('[Supabase Auth Check Exception]:', err);
-  }
-
-  return { isAuthenticated: false, userId: null, email: null };
-}
-
 export const categoryService = {
   // Public active categories (ordered by displayOrder)
   async getActiveCategories(): Promise<Category[]> {
+    // 1. Try Supabase if configured
     if (isSupabaseConfigured && supabase) {
-      const rawRows = await fetchSupabaseCategories(true);
-      if (rawRows.length > 0) {
-        return rawRows.map((r) => mapDbCategoryToCategory(r));
+      try {
+        const { data, error } = await supabase
+          .from('categories')
+          .select('*')
+          .eq('is_active', true)
+          .order('display_order', { ascending: true });
+
+        if (!error && data && data.length > 0) {
+          return data.map(mapDbCategoryToCategory);
+        }
+      } catch (err) {
+        console.error('Supabase getActiveCategories error:', err);
       }
     }
 
-    return getLocalDetailedCategories().filter((c) => c.isActive !== false);
+    // 2. Try server permanent database
+    try {
+      const res = await fetch('/api/categories');
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          return data;
+        }
+      }
+    } catch {
+      // Fall through to initial
+    }
+
+    return INITIAL_DETAILED_CATEGORIES.filter((c) => c.isActive !== false);
   },
 
   // Backward compatible string list: ['All Products', ...active category names]
@@ -848,378 +723,221 @@ export const categoryService = {
 
   // Admin: Get all categories (including inactive, with product counts)
   async getAllCategoriesAdmin(): Promise<Category[]> {
+    // 1. Try Supabase if configured
     if (isSupabaseConfigured && supabase) {
       try {
-        const [rawCats, prodsRes] = await Promise.all([
-          fetchSupabaseCategories(false),
+        const [catsRes, prodsRes] = await Promise.all([
+          supabase.from('categories').select('*').order('display_order', { ascending: true }),
           supabase.from('products').select('category'),
         ]);
 
-        if (rawCats.length > 0) {
+        if (!catsRes.error && catsRes.data && catsRes.data.length > 0) {
           const prods = prodsRes.data || [];
-          return rawCats.map((row) => {
+          return catsRes.data.map((row) => {
             const cat = mapDbCategoryToCategory(row);
             cat.productCount = prods.filter((p) => p.category === cat.name).length;
             return cat;
           });
         }
       } catch (err) {
-        console.error('[Supabase getAllCategoriesAdmin exception]:', err);
+        console.error('Supabase getAllCategoriesAdmin error:', err);
       }
     }
 
-    const localCats = getLocalDetailedCategories();
-    const localProds = getLocalProducts();
-    return localCats.map((cat) => ({
-      ...cat,
-      productCount: localProds.filter((p) => p.category === cat.name).length,
-    }));
+    // 2. Try server permanent database
+    try {
+      const res = await fetch('/api/categories/admin');
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          return data;
+        }
+      }
+    } catch {
+      // Fall through
+    }
+
+    return INITIAL_DETAILED_CATEGORIES;
   },
 
-  // Create new category (simple by name or full payload) with Auto-Healing Schema Adaptation
+  // Create new category (simple by name or full payload)
   async addCategory(
     categoryInput: string | Partial<Category>
   ): Promise<{ success: boolean; category?: Category; error: string | null }> {
-    const payload: Partial<Category> = typeof categoryInput === 'string'
+    const payload = typeof categoryInput === 'string'
       ? { name: categoryInput.trim() }
       : categoryInput;
 
-    const rawName = (payload.name || '').trim();
-    const bengaliName = (payload.bengaliName || '').trim() || undefined;
-
-    // Validation
-    if (!rawName) {
-      return { success: false, error: 'ক্যাটাগরির নাম (English) দেওয়া আবশ্যক' };
+    const trimmedName = (payload.name || '').trim();
+    if (!trimmedName) {
+      return { success: false, error: 'ক্যাটাগরির নাম দিন' };
     }
 
-    const newId = (payload.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(payload.id))
-      ? payload.id
-      : (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-          ? crypto.randomUUID()
-          : (payload.id || `cat-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`));
-    const slug = (payload.slug && payload.slug.trim())
-      ? payload.slug.trim()
-      : generateCategorySlug(rawName, newId);
-    const icon = payload.icon || 'Layers';
-    const image = payload.image || undefined;
-    const description = payload.description || undefined;
-    const isActive = payload.isActive !== undefined ? Boolean(payload.isActive) : true;
-    const displayOrder = typeof payload.displayOrder === 'number' ? payload.displayOrder : 99;
+    const slug = (
+      payload.slug?.trim() ||
+      trimmedName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+    ) || `cat-${Date.now()}`;
 
-    // 1. DIRECT SUPABASE STORAGE (When Supabase is configured)
+    // 1. When Supabase is configured, execute on Supabase first
     if (isSupabaseConfigured && supabase) {
       try {
-        const authSession = await getAuthenticatedAdminSession();
-        console.log('[Supabase Category] Attempting to create category:', {
-          name: rawName,
-          bengali_name: bengaliName || null,
+        const insertPayload = {
+          name: trimmedName,
+          bengali_name: payload.bengaliName?.trim() || null,
           slug,
-          icon,
-          description: description || null,
-          authSession,
-        });
-
-        // Pre-check for duplicate name
-        const { data: existingCat, error: checkError } = await supabase
-          .from('categories')
-          .select('id, name')
-          .ilike('name', rawName)
-          .maybeSingle();
-
-        if (checkError) {
-          console.warn('[Supabase Category Name Check]:', checkError.message);
-        }
-
-        if (existingCat) {
-          return {
-            success: false,
-            error: `"${rawName}" নামের ক্যাটাগরি ইতিমধ্যে ডাটাবেজে রয়েছে। ভিন্ন নাম নির্বাচন করুন।`,
-          };
-        }
-
-        const desiredPayload: Record<string, unknown> = {
-          id: newId,
-          name: rawName,
-          bengali_name: bengaliName || null,
-          slug,
-          icon,
-          image: image || null,
-          description: description || null,
-          is_active: isActive,
-          display_order: displayOrder,
+          icon: payload.icon || 'Layers',
+          image: payload.image || null,
+          description: payload.description || null,
+          is_active: payload.isActive !== undefined ? payload.isActive : true,
+          display_order: payload.displayOrder || 99,
         };
 
-        let insertData: any = null;
-        let lastError: any = null;
-        let attempts = 0;
-        const maxAttempts = 8;
+        const { data, error } = await supabase
+          .from('categories')
+          .insert([insertPayload])
+          .select()
+          .single();
 
-        while (attempts < maxAttempts) {
-          attempts++;
-          const dbPayload = buildSafeCategoryDbPayload(desiredPayload);
-
-          console.log(`[Supabase Category Insert Attempt ${attempts}]: Sending columns:`, Object.keys(dbPayload));
-
-          const res = await supabase
-            .from('categories')
-            .insert([dbPayload])
-            .select()
-            .single();
-
-          if (!res.error && res.data) {
-            insertData = res.data;
-            lastError = null;
-            break;
+        if (error) {
+          console.error('Supabase category insert error:', error);
+          if (error.code === '42501') {
+            return {
+              success: false,
+              error: 'ডাটাবেজে ক্যাটাগরি যুক্ত করার অনুমতি মেলেনি (RLS Policy: 42501)। আপনার অ্যাকাউন্ট (kl6544340@gmail.com) Supabase-এর \'admin_users\' টেবিলে সক্রিয় অ্যাডমিন হিসেবে অনুমোদিত কিনা এবং RLS Policy কার্যকর হয়েছে কিনা যাচাই করুন।',
+            };
           }
-
-          lastError = res.error;
-
-          // Missing column error from PostgREST / PostgreSQL schema cache
-          const missingCol = extractMissingColumnName(res.error?.message);
-          if (missingCol && !unsupportedCategoryColumns.has(missingCol)) {
-            console.warn(`[Supabase Category Auto-Healing] Column '${missingCol}' is not present in categories table. Omitting it and retrying immediately...`);
-            unsupportedCategoryColumns.add(missingCol);
-            continue;
+          if (error.code === '23505') {
+            return { success: false, error: 'এই নামের ক্যাটাগরি ইতিমধ্যে বিদ্যমান' };
           }
-
-          // Unique slug collision (code 23505)
-          if (res.error?.code === '23505' && (res.error.message.includes('slug') || res.error.details?.includes('slug'))) {
-            const uniqueSlug = `${slug}-${Date.now().toString(36).slice(-4)}`;
-            console.warn('[Supabase Category] Slug collision detected. Retrying with unique slug:', uniqueSlug);
-            desiredPayload.slug = uniqueSlug;
-            continue;
-          }
-
-          // ID type syntax issue (e.g. if table expects DB default)
-          if (res.error?.message?.includes('uuid') && dbPayload.id) {
-            console.warn('[Supabase Category] UUID issue with custom id. Removing id from payload...');
-            delete desiredPayload.id;
-            unsupportedCategoryColumns.add('id');
-            continue;
-          }
-
-          // Unrecoverable error
-          break;
+          return { success: false, error: error.message };
         }
 
-        if (lastError || !insertData) {
-          console.error('[Supabase Category Insert Error]:', lastError);
-
-          let userMessage = 'ক্যাটাগরি ডাটাবেজে সংরক্ষণ করা যায়নি।';
-          if (lastError?.code === '23505') {
-            userMessage = `"${rawName}" নামের ক্যাটাগরি বা স্লাগ ইতিমধ্যে ডাটাবেজে বিদ্যমান।`;
-          } else if (
-            lastError?.code === '42501' ||
-            lastError?.message?.includes('permission') ||
-            lastError?.message?.includes('policy') ||
-            lastError?.message?.includes('row-level security')
-          ) {
-            if (!authSession.isAuthenticated) {
-              userMessage = 'ডাটাবেজে ক্যাটাগরি যুক্ত করার অনুমতি মেলেনি (RLS Policy: 42501)। আপনার Supabase অ্যাডমিন লগইন সেশন সক্রিয় নেই। অনুগ্রহ করে অ্যাডমিন হিসেবে পুনরায় লগইন করুন।';
-            } else {
-              userMessage = `ডাটাবেজে ক্যাটাগরি যুক্ত করার অনুমতি মেলেনি (RLS Policy: 42501)। আপনার অ্যাকাউন্ট (${authSession.email || 'Admin'}) Supabase-এর 'admin_users' টেবিলে সক্রিয় অ্যাডমিন হিসেবে অনুমোদিত কিনা এবং RLS Policy কার্যকর হয়েছে কিনা যাচাই করুন।`;
-            }
-          } else if (lastError?.message) {
-            userMessage = `ডাটাবেজ ত্রুটি: ${lastError.message}`;
-          }
-
-          return { success: false, error: userMessage };
+        // Also sync to local backend for cache / offline resilience
+        try {
+          await fetch('/api/categories', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              ...payload,
+              id: data.id,
+              slug: data.slug,
+            }),
+          });
+        } catch {
+          // Local sync failure ignored when Supabase succeeds
         }
 
-        updateDetectedColumns([insertData]);
-
-        const createdCategory = mapDbCategoryToCategory(insertData, {
-          bengaliName,
-          description,
-          icon,
-          image,
-          isActive,
-          displayOrder,
-        });
-
-        console.log('[Supabase Category Created Successfully]:', createdCategory);
-
-        // Sync into local cache
-        const localCats = getLocalDetailedCategories();
-        saveLocalDetailedCategories([...localCats.filter((c) => c.name !== createdCategory.name), createdCategory]);
-
-        return { success: true, category: createdCategory, error: null };
+        return { success: true, category: mapDbCategoryToCategory(data), error: null };
       } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : 'অজানা ডাটাবেজ ত্রুটি';
-        console.error('[Supabase Category Exception]:', err);
-        return { success: false, error: `ডাটাবেজ ত্রুটি: ${message}` };
+        const msg = err instanceof Error ? err.message : 'ডাটাবেজ সংযোগে সমস্যা';
+        return { success: false, error: msg };
       }
     }
 
-    // 2. PERSISTENT LOCAL STORAGE (Fallback when Supabase credentials are not yet configured)
+    // 2. Local server permanent database fallback
     try {
-      const localCats = getLocalDetailedCategories();
-      const duplicate = localCats.find(
-        (c) => c.name.toLowerCase() === rawName.toLowerCase()
-      );
+      const res = await fetch('/api/categories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
 
-      if (duplicate) {
-        return {
-          success: false,
-          error: `"${rawName}" নামের ক্যাটাগরি ইতিমধ্যে বিদ্যমান রয়েছে।`,
-        };
+      if (res.ok) {
+        const data = await res.json();
+        return { success: true, category: data.category, error: null };
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        return { success: false, error: errData.error || 'ক্যাটাগরি তৈরি ব্যর্থ হয়েছে' };
       }
-
-      const newCategory: Category = {
-        id: newId,
-        name: rawName,
-        bengaliName,
-        slug,
-        icon,
-        image,
-        description,
-        isActive,
-        displayOrder: displayOrder || localCats.length + 1,
-        productCount: 0,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-
-      const updated = [...localCats, newCategory];
-      saveLocalDetailedCategories(updated);
-
-      return { success: true, category: newCategory, error: null };
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'অজানা ত্রুটি';
-      return { success: false, error: `ক্যাটাগরি তৈরি ব্যর্থ হয়েছে: ${message}` };
+      const msg = err instanceof Error ? err.message : 'সার্ভারে সংযোগ করা সম্ভব হয়নি';
+      return { success: false, error: msg };
     }
   },
 
-  // Edit category (with cascading rename and Auto-Healing Schema Adaptation)
+  // Edit category (cascading rename)
   async updateCategory(
     id: string,
     categoryData: Partial<Category>,
     oldName?: string
   ): Promise<{ success: boolean; category?: Category; error: string | null }> {
-    const now = new Date().toISOString();
-
     if (isSupabaseConfigured && supabase) {
       try {
-        const authSession = await getAuthenticatedAdminSession();
-        const desiredPayload: Record<string, unknown> = {
-          updated_at: now,
-        };
-        if (categoryData.name !== undefined) desiredPayload.name = categoryData.name.trim();
-        if (categoryData.bengaliName !== undefined) desiredPayload.bengali_name = categoryData.bengaliName?.trim() || null;
-        if (categoryData.slug !== undefined) desiredPayload.slug = categoryData.slug.trim();
-        if (categoryData.icon !== undefined) desiredPayload.icon = categoryData.icon;
-        if (categoryData.image !== undefined) desiredPayload.image = categoryData.image || null;
-        if (categoryData.description !== undefined) desiredPayload.description = categoryData.description || null;
-        if (categoryData.isActive !== undefined) desiredPayload.is_active = categoryData.isActive;
-        if (categoryData.displayOrder !== undefined) desiredPayload.display_order = categoryData.displayOrder;
+        const dbPayload: Record<string, unknown> = {};
+        if (categoryData.name !== undefined) dbPayload.name = categoryData.name.trim();
+        if (categoryData.bengaliName !== undefined) dbPayload.bengali_name = categoryData.bengaliName.trim() || null;
+        if (categoryData.slug !== undefined) dbPayload.slug = categoryData.slug.trim();
+        if (categoryData.icon !== undefined) dbPayload.icon = categoryData.icon;
+        if (categoryData.image !== undefined) dbPayload.image = categoryData.image;
+        if (categoryData.description !== undefined) dbPayload.description = categoryData.description;
+        if (categoryData.isActive !== undefined) dbPayload.is_active = categoryData.isActive;
+        if (categoryData.displayOrder !== undefined) dbPayload.display_order = categoryData.displayOrder;
+        dbPayload.updated_at = new Date().toISOString();
 
-        let updateData: any = null;
-        let lastError: any = null;
-        let attempts = 0;
+        const { data, error } = await supabase
+          .from('categories')
+          .update(dbPayload)
+          .eq('id', id)
+          .select()
+          .single();
 
-        while (attempts < 8) {
-          attempts++;
-          const dbPayload = buildSafeCategoryDbPayload(desiredPayload);
-
-          const res = await supabase
-            .from('categories')
-            .update(dbPayload)
-            .eq('id', id)
-            .select()
-            .single();
-
-          if (!res.error && res.data) {
-            updateData = res.data;
-            lastError = null;
-            break;
+        if (error) {
+          console.error('Supabase category update error:', error);
+          if (error.code === '42501') {
+            return {
+              success: false,
+              error: 'ডাটাবেজে ক্যাটাগরি আপডেট করার অনুমতি মেলেনি (RLS Policy: 42501)।',
+            };
           }
-
-          lastError = res.error;
-
-          const missingCol = extractMissingColumnName(res.error?.message);
-          if (missingCol && !unsupportedCategoryColumns.has(missingCol)) {
-            console.warn(`[Supabase Category Update Auto-Healing] Column '${missingCol}' missing. Omitting and retrying...`);
-            unsupportedCategoryColumns.add(missingCol);
-            continue;
+          if (error.code === '23505') {
+            return { success: false, error: 'এই নামের অন্য একটি ক্যাটাগরি ইতিমধ্যে বিদ্যমান' };
           }
-
-          break;
+          return { success: false, error: error.message };
         }
 
-        if (lastError || !updateData) {
-          console.error('[Supabase Category Update Error]:', lastError);
-          let errorMsg = `আপডেট ব্যর্থ হয়েছে: ${lastError?.message || 'অজানা ত্রুটি'}`;
-          if (
-            lastError?.code === '42501' ||
-            lastError?.message?.includes('permission') ||
-            lastError?.message?.includes('policy') ||
-            lastError?.message?.includes('row-level security')
-          ) {
-            errorMsg = !authSession.isAuthenticated
-              ? 'ক্যাটাগরি আপডেট করার অনুমতি মেলেনি (RLS Policy: 42501)। অনুগ্রহ করে অ্যাডমিন হিসেবে পুনরায় লগইন করুন।'
-              : `ক্যাটাগরি আপডেট করার অনুমতি মেলেনি (RLS Policy: 42501)। আপনার অ্যাকাউন্ট (${authSession.email || 'Admin'}) admin_users টেবিলে সক্রিয় অ্যাডমিন কিনা এবং RLS Policy কার্যকর হয়েছে কিনা যাচাই করুন।`;
-          }
-          return { success: false, error: errorMsg };
-        }
-
-        // Cascading rename to products table
-        if (oldName && categoryData.name && oldName !== categoryData.name) {
-          console.log(`[Supabase Cascading Category Rename] from "${oldName}" to "${categoryData.name}"`);
-          const { error: prodUpdateError } = await supabase
+        // If category name was renamed, cascade update to associated products in Supabase
+        if (oldName && categoryData.name && oldName !== categoryData.name.trim()) {
+          await supabase
             .from('products')
-            .update({ category: categoryData.name.trim() })
+            .update({ category: categoryData.name.trim(), updated_at: new Date().toISOString() })
             .eq('category', oldName);
-
-          if (prodUpdateError) {
-            console.warn('[Supabase Cascading Category Rename Warning]:', prodUpdateError.message);
-          }
         }
 
-        updateDetectedColumns([updateData]);
+        // Sync to local server
+        try {
+          await fetch(`/api/categories/${encodeURIComponent(id)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(categoryData),
+          });
+        } catch {}
 
-        const updatedCat = mapDbCategoryToCategory(updateData, categoryData);
-
-        // Sync local
-        const localCats = getLocalDetailedCategories();
-        const index = localCats.findIndex((c) => c.id === id);
-        if (index !== -1) {
-          localCats[index] = updatedCat;
-          saveLocalDetailedCategories(localCats);
-        }
-
-        return { success: true, category: updatedCat, error: null };
+        return { success: true, category: mapDbCategoryToCategory(data), error: null };
       } catch (err: unknown) {
-        console.error('[Supabase Category Update Exception]:', err);
-        const msg = err instanceof Error ? err.message : 'অজানা সমস্যা';
+        const msg = err instanceof Error ? err.message : 'ক্যাটাগরি আপডেট ব্যর্থ হয়েছে';
         return { success: false, error: msg };
       }
     }
 
-    // Local update
-    const localCats = getLocalDetailedCategories();
-    const index = localCats.findIndex((c) => c.id === id);
-    if (index === -1) {
-      return { success: false, error: 'ক্যাটাগরি খুঁজে পাওয়া যায়নি।' };
+    // Local server API fallback
+    try {
+      const res = await fetch(`/api/categories/${encodeURIComponent(id)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(categoryData),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        return { success: true, category: data.category, error: null };
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        return { success: false, error: errData.error || 'আপডেট ব্যর্থ হয়েছে' };
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'অজানা সমস্যা';
+      return { success: false, error: msg };
     }
-
-    const updatedCat: Category = {
-      ...localCats[index],
-      ...categoryData,
-      updatedAt: now,
-    };
-    localCats[index] = updatedCat;
-    saveLocalDetailedCategories(localCats);
-
-    // Cascade local products rename
-    if (oldName && categoryData.name && oldName !== categoryData.name) {
-      const localProds = getLocalProducts();
-      const updatedProds = localProds.map((p) =>
-        p.category === oldName ? { ...p, category: categoryData.name! } : p
-      );
-      saveLocalProducts(updatedProds);
-    }
-
-    return { success: true, category: updatedCat, error: null };
   },
 
   // Toggle category active/inactive status
@@ -1228,99 +946,90 @@ export const categoryService = {
     isActive: boolean
   ): Promise<{ success: boolean; error: string | null }> {
     if (isSupabaseConfigured && supabase) {
-      if (!unsupportedCategoryColumns.has('is_active')) {
-        try {
-          const authSession = await getAuthenticatedAdminSession();
-          const { error } = await supabase
-            .from('categories')
-            .update({ is_active: isActive })
-            .eq('id', id);
+      try {
+        const { error } = await supabase
+          .from('categories')
+          .update({ is_active: isActive, updated_at: new Date().toISOString() })
+          .eq('id', id);
 
-          if (error) {
-            const missingCol = extractMissingColumnName(error.message);
-            if (missingCol === 'is_active') {
-              unsupportedCategoryColumns.add('is_active');
-            } else {
-              console.error('[Supabase Toggle Category Error]:', error);
-              if (
-                error.code === '42501' ||
-                error.message.includes('permission') ||
-                error.message.includes('policy') ||
-                error.message.includes('row-level security')
-              ) {
-                return {
-                  success: false,
-                  error: !authSession.isAuthenticated
-                    ? 'ক্যাটাগরি স্ট্যাটাস পরিবর্তনের অনুমতি মেলেনি (RLS Policy: 42501)। অনুগ্রহ করে অ্যাডমিন হিসেবে লগইন করুন।'
-                    : `ক্যাটাগরি স্ট্যাটাস পরিবর্তনের অনুমতি মেলেনি (RLS Policy: 42501)। অ্যাকাউন্ট (${authSession.email || 'Admin'}) admin_users টেবিলে অনুমোদিত কিনা যাচাই করুন।`,
-                };
-              }
-              return { success: false, error: error.message };
-            }
+        if (error) {
+          if (error.code === '42501') {
+            return {
+              success: false,
+              error: 'ক্যাটাগরি স্ট্যাটাস পরিবর্তনের অনুমতি মেলেনি (RLS Policy: 42501)।',
+            };
           }
-        } catch (err: unknown) {
-          console.warn('[Supabase Toggle Category Exception]:', err);
+          return { success: false, error: error.message };
         }
+
+        try {
+          await fetch(`/api/categories/${encodeURIComponent(id)}/toggle`, {
+            method: 'PATCH',
+          });
+        } catch {}
+
+        return { success: true, error: null };
+      } catch {
+        return { success: false, error: 'ডাটাবেজ স্ট্যাটাস আপডেট ব্যর্থ হয়েছে' };
       }
     }
 
-    const localCats = getLocalDetailedCategories();
-    const index = localCats.findIndex((c) => c.id === id);
-    if (index !== -1) {
-      localCats[index].isActive = isActive;
-      saveLocalDetailedCategories(localCats);
+    try {
+      const res = await fetch(`/api/categories/${encodeURIComponent(id)}/toggle`, {
+        method: 'PATCH',
+      });
+      if (res.ok) {
+        return { success: true, error: null };
+      }
+      const errData = await res.json().catch(() => ({}));
+      return { success: false, error: errData.error || 'স্ট্যাটাস পরিবর্তন ব্যর্থ হয়েছে' };
+    } catch {
+      return { success: false, error: 'সার্ভার সমস্যা' };
     }
-    return { success: true, error: null };
   },
 
-  // Reorder categories (drag-and-drop or manual display order)
+  // Reorder categories
   async reorderCategories(
     orderedIds: string[]
   ): Promise<{ success: boolean; error: string | null }> {
     if (isSupabaseConfigured && supabase) {
-      if (!unsupportedCategoryColumns.has('display_order')) {
-        try {
-          await getAuthenticatedAdminSession();
-          const updates = orderedIds.map((id, index) =>
+      try {
+        await Promise.all(
+          orderedIds.map((id, index) =>
             supabase
               .from('categories')
-              .update({ display_order: index + 1 })
+              .update({ display_order: index + 1, updated_at: new Date().toISOString() })
               .eq('id', id)
-          );
-          const results = await Promise.all(updates);
-          for (const res of results) {
-            if (res.error) {
-              const missingCol = extractMissingColumnName(res.error.message);
-              if (missingCol === 'display_order') {
-                unsupportedCategoryColumns.add('display_order');
-                break;
-              } else if (
-                res.error.code === '42501' ||
-                res.error.message.includes('permission') ||
-                res.error.message.includes('policy')
-              ) {
-                return { success: false, error: 'ক্যাটাগরি ক্রম পরিবর্তনের অনুমতি মেলেনি (RLS Policy: 42501)।' };
-              }
-            }
-          }
-        } catch (err: unknown) {
-          console.error('[Supabase Reorder Categories Error]:', err);
-        }
+          )
+        );
+      } catch (err) {
+        console.error('Supabase reorder error:', err);
       }
+
+      try {
+        await fetch('/api/categories/reorder', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ orderedIds }),
+        });
+      } catch {}
+
+      return { success: true, error: null };
     }
 
-    const localCats = getLocalDetailedCategories();
-    const ordered = orderedIds
-      .map((id, idx) => {
-        const item = localCats.find((c) => c.id === id);
-        return item ? { ...item, displayOrder: idx + 1 } : null;
-      })
-      .filter(Boolean) as Category[];
-
-    const remaining = localCats.filter((c) => !orderedIds.includes(c.id));
-    saveLocalDetailedCategories([...ordered, ...remaining]);
-
-    return { success: true, error: null };
+    try {
+      const res = await fetch('/api/categories/reorder', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderedIds }),
+      });
+      if (res.ok) {
+        return { success: true, error: null };
+      }
+      return { success: false, error: 'পুনর্বিন্যাস সেভ করা যায়নি' };
+    } catch {
+      return { success: false, error: 'সার্ভার সমস্যা' };
+    }
   },
 
   // Delete category with accidental deletion prevention & reassignment
@@ -1328,90 +1037,72 @@ export const categoryService = {
     id: string,
     reassignToCategoryName?: string
   ): Promise<{ success: boolean; error: string | null; reassignedCount?: number }> {
-    let reassignedCount = 0;
-
     if (isSupabaseConfigured && supabase) {
       try {
-        const authSession = await getAuthenticatedAdminSession();
-        const { data: catToDelete, error: fetchErr } = await supabase
-          .from('categories')
-          .select('name')
-          .eq('id', id)
-          .single();
-
-        if (fetchErr) {
-          console.error('[Supabase Delete Category Fetch Error]:', fetchErr);
-        }
-
-        const catName = catToDelete?.name;
-
-        // Reassign products if requested
-        if (reassignToCategoryName && catName) {
-          const { data: updatedProds, error: reassignErr } = await supabase
-            .from('products')
-            .update({ category: reassignToCategoryName })
-            .eq('category', catName)
-            .select('id');
-
-          if (reassignErr) {
-            console.error('[Supabase Reassign Products Error]:', reassignErr);
-            return { success: false, error: `প্রোডাক্ট পুনঃবরাদ্দ করা যায়নি: ${reassignErr.message}` };
+        let reassignedCount = 0;
+        if (reassignToCategoryName) {
+          const { data: cat } = await supabase.from('categories').select('name').eq('id', id).single();
+          if (cat?.name) {
+            const { data: updatedProds } = await supabase
+              .from('products')
+              .update({ category: reassignToCategoryName, updated_at: new Date().toISOString() })
+              .eq('category', cat.name)
+              .select('id');
+            reassignedCount = updatedProds?.length || 0;
           }
-          reassignedCount = updatedProds ? updatedProds.length : 0;
         }
 
-        const { error: deleteErr } = await supabase
-          .from('categories')
-          .delete()
-          .eq('id', id);
-
-        if (deleteErr) {
-          console.error('[Supabase Delete Category Error]:', deleteErr);
-          let errorMsg = `ক্যাটাগরি ডিলিট ব্যর্থ হয়েছে: ${deleteErr.message}`;
-          if (
-            deleteErr.code === '42501' ||
-            deleteErr.message.includes('permission') ||
-            deleteErr.message.includes('policy') ||
-            deleteErr.message.includes('row-level security')
-          ) {
-            errorMsg = !authSession.isAuthenticated
-              ? 'ক্যাটাগরি মুছে ফেলার অনুমতি মেলেনি (RLS Policy: 42501)। অনুগ্রহ করে অ্যাডমিন হিসেবে লগইন করুন।'
-              : `ক্যাটাগরি মুছে ফেলার অনুমতি মেলেনি (RLS Policy: 42501)। আপনার অ্যাকাউন্ট (${authSession.email || 'Admin'}) admin_users টেবিলে সক্রিয় অ্যাডমিন কিনা এবং RLS Policy কার্যকর হয়েছে কিনা যাচাই করুন।`;
+        const { error } = await supabase.from('categories').delete().eq('id', id);
+        if (error) {
+          console.error('Supabase category delete error:', error);
+          if (error.code === '42501') {
+            return {
+              success: false,
+              error: 'ডাটাবেজ থেকে ক্যাটাগরি মুছে ফেলার অনুমতি মেলেনি (RLS Policy: 42501)।',
+            };
           }
-          return { success: false, error: errorMsg };
+          return { success: false, error: error.message };
         }
 
-        // Local sync
-        const localCats = getLocalDetailedCategories().filter((c) => c.id !== id);
-        saveLocalDetailedCategories(localCats);
+        // Sync to local server
+        try {
+          const url = `/api/categories/${encodeURIComponent(id)}${
+            reassignToCategoryName ? `?reassignTo=${encodeURIComponent(reassignToCategoryName)}` : ''
+          }`;
+          await fetch(url, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reassignTo: reassignToCategoryName }),
+          });
+        } catch {}
 
         return { success: true, error: null, reassignedCount };
       } catch (err: unknown) {
-        console.error('[Supabase Delete Category Exception]:', err);
-        const msg = err instanceof Error ? err.message : 'ক্যাটাগরি মুছে ফেলা যায়নি';
+        const msg = err instanceof Error ? err.message : 'ক্যাটাগরি ডিলিট ব্যর্থ হয়েছে';
         return { success: false, error: msg };
       }
     }
 
-    // Local path
-    const localCats = getLocalDetailedCategories();
-    const target = localCats.find((c) => c.id === id);
-    if (target && reassignToCategoryName) {
-      const localProds = getLocalProducts();
-      const updatedProds = localProds.map((p) => {
-        if (p.category === target.name) {
-          reassignedCount++;
-          return { ...p, category: reassignToCategoryName };
-        }
-        return p;
+    // Local server API fallback
+    try {
+      const url = `/api/categories/${encodeURIComponent(id)}${
+        reassignToCategoryName ? `?reassignTo=${encodeURIComponent(reassignToCategoryName)}` : ''
+      }`;
+      const res = await fetch(url, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reassignTo: reassignToCategoryName }),
       });
-      saveLocalProducts(updatedProds);
+
+      const data = await res.json();
+      if (res.ok) {
+        return { success: true, error: null, reassignedCount: data.reassignedCount };
+      }
+      return { success: false, error: data.error || 'ডিলিট ব্যর্থ হয়েছে' };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'ডিলিট করা যায়নি';
+      return { success: false, error: msg };
     }
-
-    const filtered = localCats.filter((c) => c.id !== id);
-    saveLocalDetailedCategories(filtered);
-
-    return { success: true, error: null, reassignedCount };
   },
 };
 
@@ -1699,33 +1390,32 @@ function mapPartialProductToDbPayload(
   return payload;
 }
 
-function mapDbCategoryToCategory(row: any, overrides?: Partial<Category>): Category {
+function mapDbCategoryToCategory(row: any): Category {
   return {
     id: String(row.id),
     name: row.name,
-    bengaliName: row.bengali_name || overrides?.bengaliName || undefined,
-    slug: row.slug || generateCategorySlug(row.name, row.id),
-    icon: row.icon || overrides?.icon || 'Layers',
-    image: row.image || overrides?.image || undefined,
-    description: row.description || overrides?.description || undefined,
-    isActive: row.is_active !== undefined ? Boolean(row.is_active) : (overrides?.isActive ?? true),
-    displayOrder: row.display_order ? Number(row.display_order) : (overrides?.displayOrder ?? 0),
+    bengaliName: row.bengali_name || undefined,
+    slug: row.slug,
+    icon: row.icon || 'Layers',
+    image: row.image || undefined,
+    description: row.description || undefined,
+    isActive: row.is_active !== undefined ? Boolean(row.is_active) : true,
+    displayOrder: row.display_order ? Number(row.display_order) : 0,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
 }
 
 function mapCategoryToDbPayload(category: Category): Record<string, unknown> {
-  const payload: Record<string, unknown> = {
+  return {
     id: category.id,
     name: category.name,
+    bengali_name: category.bengaliName || null,
     slug: category.slug,
+    icon: category.icon || 'Layers',
+    image: category.image || null,
+    description: category.description || null,
+    is_active: category.isActive,
+    display_order: category.displayOrder,
   };
-  if (category.bengaliName !== undefined) payload.bengali_name = category.bengaliName || null;
-  if (category.icon !== undefined) payload.icon = category.icon;
-  if (category.image !== undefined) payload.image = category.image || null;
-  if (category.description !== undefined) payload.description = category.description || null;
-  if (category.isActive !== undefined) payload.is_active = category.isActive;
-  if (category.displayOrder !== undefined) payload.display_order = category.displayOrder;
-  return payload;
 }

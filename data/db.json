@@ -71,6 +71,18 @@
       "description": "স্পোর্টস ব্লুটুথ নেকব্যান্ড ও ওয়্যারলেস ইয়ারফোন",
       "createdAt": "2026-11-04T08:32:18.605Z",
       "updatedAt": "2026-11-04T08:34:09.121Z"
+    },
+    {
+      "id": "cat-watch",
+      "name": "Watch",
+      "bengaliName": "ঘড়ি",
+      "slug": "watch",
+      "icon": "Layers",
+      "isActive": true,
+      "displayOrder": 7,
+      "description": "স্মার্টওয়াচ, ফিটনেস ব্যান্ড ও প্রিমিয়াম হাতঘড়ি কালেকশন",
+      "createdAt": "2026-11-06T00:00:00.000Z",
+      "updatedAt": "2026-11-06T00:00:00.000Z"
     }
   ],
   "products": [

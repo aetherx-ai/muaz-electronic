@@ -138,6 +138,18 @@ const DEFAULT_CATEGORIES: CategoryRecord[] = [
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   },
+  {
+    id: 'cat-watch',
+    name: 'Watch',
+    bengaliName: 'ঘড়ি',
+    slug: 'watch',
+    icon: 'Layers',
+    isActive: true,
+    displayOrder: 7,
+    description: 'স্মার্টওয়াচ, ফিটনেস ব্যান্ড ও প্রিমিয়াম হাতঘড়ি কালেকশন',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
 ];
 
 const DEFAULT_SETTINGS: StoreSettingsRecord = {

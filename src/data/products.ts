@@ -244,6 +244,16 @@ export const INITIAL_DETAILED_CATEGORIES: Category[] = [
     displayOrder: 6,
     description: 'স্পোর্টস ব্লুটুথ নেকব্যান্ড ও ওয়্যারলেস ইয়ারফোন',
   },
+  {
+    id: 'cat-watch',
+    name: 'Watch',
+    bengaliName: 'ঘড়ি',
+    slug: 'watch',
+    icon: 'Layers',
+    isActive: true,
+    displayOrder: 7,
+    description: 'স্মার্টওয়াচ, ফিটনেস ব্যান্ড ও প্রিমিয়াম হাতঘড়ি কালেকশন',
+  },
 ];
 
 export const INITIAL_CATEGORIES = [
