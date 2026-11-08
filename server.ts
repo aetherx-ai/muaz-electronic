@@ -636,6 +636,23 @@ app.put('/api/settings', (req: Request, res: Response) => {
 });
 
 // -----------------------------------------------------------------------------
+// GOOGLE SEARCH CONSOLE HTML VERIFICATION HANDLER
+// -----------------------------------------------------------------------------
+app.get('/google:hash.html', (req: Request, res: Response, next) => {
+  const fileName = `google${req.params.hash}.html`;
+  const publicFile = path.join(__dirname, 'public', fileName);
+  const distFile = path.join(__dirname, 'dist', fileName);
+
+  if (fs.existsSync(publicFile)) {
+    return res.type('text/html').sendFile(publicFile);
+  }
+  if (fs.existsSync(distFile)) {
+    return res.type('text/html').sendFile(distFile);
+  }
+  next();
+});
+
+// -----------------------------------------------------------------------------
 // DEV VITE MIDDLEWARE OR PRODUCTION STATIC SERVING
 // -----------------------------------------------------------------------------
 async function startServer() {
