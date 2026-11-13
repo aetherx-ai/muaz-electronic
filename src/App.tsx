@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { CartProvider } from './context/CartContext';
+import { CartProvider, useCart } from './context/CartContext';
 import { Header } from './components/Header';
 import { Hero } from './components/Hero';
 import { ProductCatalog } from './components/ProductCatalog';
@@ -20,6 +20,7 @@ import { INITIAL_DETAILED_CATEGORIES } from './data/products';
 // Inner App Content with Route Switching and Auth state
 function MainApp() {
   const { user, loading: authLoading } = useAuth();
+  const { setSelectedProductForDetail } = useCart();
 
   // Route state
   const [currentPath, setCurrentPath] = useState<string>(() => {
@@ -56,6 +57,11 @@ function MainApp() {
       ]);
       setProducts(prods);
       setCategories(cats);
+      setSelectedProductForDetail((prev) => {
+        if (!prev) return prev;
+        const fresh = prods.find((p) => p.id === prev.id);
+        return fresh || prev;
+      });
     } catch (err) {
       console.error('Error loading storefront data:', err);
     }
@@ -66,6 +72,14 @@ function MainApp() {
       loadStorefrontData();
     }
   }, [currentPath]);
+
+  useEffect(() => {
+    const handleProductsUpdated = () => {
+      loadStorefrontData();
+    };
+    window.addEventListener('muaz-products-updated', handleProductsUpdated);
+    return () => window.removeEventListener('muaz-products-updated', handleProductsUpdated);
+  }, []);
 
   const handleSearchClick = () => {
     const productsSection = document.getElementById('products');

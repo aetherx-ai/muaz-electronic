@@ -1,5 +1,15 @@
 export type ProductStatus = 'published' | 'draft';
 
+export const CLOTHING_SIZES = ['S', 'M', 'L', 'XL', 'XXL'] as const;
+export type ClothingSize = (typeof CLOTHING_SIZES)[number];
+
+export interface SizeStockEntry {
+  enabled: boolean;
+  stock: number;
+}
+
+export type SizeInventoryMap = Partial<Record<ClothingSize, SizeStockEntry>>;
+
 export interface Product {
   id: string;
   name: string;
@@ -9,6 +19,8 @@ export interface Product {
   category: string;
   brand?: string;
   stock: number;
+  hasSizes?: boolean;
+  sizeInventory?: SizeInventoryMap;
   status: ProductStatus;
   isFeatured?: boolean;
   image: string;
@@ -47,6 +59,7 @@ export interface StoreSettings {
 export interface CartItem {
   product: Product;
   quantity: number;
+  selectedSize?: ClothingSize;
 }
 
 export type OrderStatus = 'pending' | 'confirmed' | 'shipped' | 'delivered' | 'cancelled';
@@ -67,6 +80,7 @@ export interface CustomerOrder {
   orderNumber: string;
   status?: OrderStatus;
   paymentStatus?: PaymentStatus;
+  stockDeducted?: boolean;
   createdAt?: string;
   updatedAt?: string;
 }

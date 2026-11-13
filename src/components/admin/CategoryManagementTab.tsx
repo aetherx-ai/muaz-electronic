@@ -42,7 +42,7 @@ export const CategoryManagementTab: React.FC<CategoryManagementTabProps> = ({
   onReorderCategories,
   onDeleteCategory,
 }) => {
-  // Quick Add State (Requirement 2)
+  // Quick Add State
   const [quickName, setQuickName] = useState('');
   const [quickBengaliName, setQuickBengaliName] = useState('');
   const [isQuickSubmitting, setIsQuickSubmitting] = useState(false);
@@ -59,7 +59,7 @@ export const CategoryManagementTab: React.FC<CategoryManagementTabProps> = ({
   const [categoryToDelete, setCategoryToDelete] = useState<Category | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Drag and drop state (Requirement 5)
+  // Drag and drop state
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [isReordering, setIsReordering] = useState(false);
 
@@ -124,25 +124,22 @@ export const CategoryManagementTab: React.FC<CategoryManagementTabProps> = ({
     if (res.success) {
       setQuickName('');
       setQuickBengaliName('');
-      showToast('success', `"${quickName.trim()}" ক্যাটাগরি সফলভাবে ডাটাবেজে সংরক্ষণ করা হয়েছে`);
+      showToast('success', `"${newCategory.name}" ক্যাটাগরি সফলভাবে ডাটাবেজে সংরক্ষণ করা হয়েছে`);
     } else {
       showToast('error', res.error || 'যুক্ত করা সম্ভব হয়নি');
     }
   };
 
-  // Open Full Add Modal
   const handleOpenAddModal = () => {
     setEditingCategory(null);
     setIsFormModalOpen(true);
   };
 
-  // Open Edit Modal
   const handleOpenEditModal = (cat: Category) => {
     setEditingCategory(cat);
     setIsFormModalOpen(true);
   };
 
-  // Save Add/Edit Category
   const handleSaveCategory = async (
     data: Partial<Category>,
     categoryId?: string,
@@ -163,7 +160,6 @@ export const CategoryManagementTab: React.FC<CategoryManagementTabProps> = ({
     }
   };
 
-  // Toggle Status
   const handleToggleActive = async (cat: Category) => {
     const newStatus = !cat.isActive;
     const res = await onToggleStatus(cat.id, newStatus);
@@ -177,13 +173,11 @@ export const CategoryManagementTab: React.FC<CategoryManagementTabProps> = ({
     }
   };
 
-  // Open Safe Delete / Reassign Modal (Requirement 9)
   const handleOpenDeleteModal = (cat: Category) => {
     setCategoryToDelete(cat);
     setIsDeleteModalOpen(true);
   };
 
-  // Confirm Safe Delete with Reassignment
   const handleConfirmDelete = async (categoryId: string, reassignToCategoryName?: string) => {
     setIsDeleting(true);
     const res = await onDeleteCategory(categoryId, reassignToCategoryName);
@@ -203,7 +197,7 @@ export const CategoryManagementTab: React.FC<CategoryManagementTabProps> = ({
     }
   };
 
-  // Drag and Drop Handlers (Requirement 5)
+  // Drag and Drop Handlers
   const handleDragStart = (e: React.DragEvent, index: number) => {
     setDraggedIndex(index);
     e.dataTransfer.effectAllowed = 'move';
@@ -224,7 +218,6 @@ export const CategoryManagementTab: React.FC<CategoryManagementTabProps> = ({
     if (draggedIndex === null) return;
     setDraggedIndex(null);
 
-    // Save new display order
     setIsReordering(true);
     const orderedIds = categories.map((c) => c.id);
     await onReorderCategories(orderedIds);
@@ -232,7 +225,6 @@ export const CategoryManagementTab: React.FC<CategoryManagementTabProps> = ({
     showToast('success', 'ক্যাটাগরির ক্রমবিন্যাস সংরক্ষিত হয়েছে');
   };
 
-  // Up/Down Arrows Reordering for Mobile & 1-Click
   const handleMoveOrder = async (index: number, direction: 'up' | 'down') => {
     const targetIndex = direction === 'up' ? index - 1 : index + 1;
     if (targetIndex < 0 || targetIndex >= categories.length) return;
@@ -256,18 +248,17 @@ export const CategoryManagementTab: React.FC<CategoryManagementTabProps> = ({
 
   return (
     <div className="space-y-6 max-w-6xl animate-in fade-in duration-150">
-      
       {/* Toast Feedback */}
       {feedback && (
         <div
-          className={`p-3.5 rounded-xl border flex items-center gap-2.5 text-xs font-semibold shadow-sm transition-all ${
+          className={`p-3.5 rounded-[12px] border flex items-center gap-2.5 text-xs font-semibold shadow-xs transition-all ${
             feedback.type === 'success'
-              ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+              ? 'bg-[#ECFDF3] border-emerald-200 text-[#15803D]'
               : 'bg-rose-50 border-rose-200 text-rose-800'
           }`}
         >
           {feedback.type === 'success' ? (
-            <CheckCircle className="w-4 h-4 shrink-0 text-emerald-600" />
+            <CheckCircle className="w-4 h-4 shrink-0 text-[#16A34A]" />
           ) : (
             <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
           )}
@@ -278,96 +269,88 @@ export const CategoryManagementTab: React.FC<CategoryManagementTabProps> = ({
       {/* Top Header & Overview */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl sm:text-2xl font-bold text-slate-900 font-display flex items-center gap-2.5">
-            <Layers className="w-6 h-6 text-blue-600" />
-            <span>ডায়নামিক ক্যাটাগরি ম্যানেজমেন্ট</span>
+          <h2 className="text-xl sm:text-2xl font-bold text-slate-900 font-display tracking-tight">
+            ক্যাটাগরি ম্যানেজমেন্ট
           </h2>
           <p className="text-xs text-slate-500 mt-1">
-            স্টোরের সকল পণ্য বিভাগ পরিচালনা করুন, নতুন ক্যাটাগরি তৈরি করুন এবং ড্র্যাগ-এন্ড-ড্রপ করে সাজান
+            স্টোরের সকল পণ্য বিভাগ পরিচালনা করুন, নতুন ক্যাটাগরি তৈরি করুন এবং প্রদর্শন ক্রম সাজান
           </p>
         </div>
 
         <button
+          type="button"
           onClick={handleOpenAddModal}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 active:scale-[0.98] rounded-xl transition-all shadow-xs shrink-0"
+          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-semibold text-white bg-[#16A34A] hover:bg-[#15803D] rounded-[10px] transition-colors shadow-xs shrink-0 whitespace-nowrap"
         >
           <Plus className="w-4 h-4 stroke-[2.5]" />
-          <span>+ Add New Category (নতুন ক্যাটাগরি)</span>
+          <span>নতুন ক্যাটাগরি যোগ করুন</span>
         </button>
       </div>
 
       {/* Metrics Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
-        <div className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-xs">
+        <div className="bg-white border border-slate-200/80 rounded-[12px] p-4 shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-              মোট ক্যাটাগরি
-            </span>
-            <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 border border-blue-100 flex items-center justify-center">
-              <Layers className="w-3.5 h-3.5" />
+            <span className="text-[11px] font-semibold text-slate-500">মোট ক্যাটাগরি</span>
+            <div className="w-8 h-8 rounded-[8px] bg-[#ECFDF3] text-[#16A34A] border border-emerald-200/70 flex items-center justify-center">
+              <Layers className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-2 text-2xl font-extrabold text-slate-900 font-display tabular-nums">
             {totalCategories}
           </div>
-          <span className="text-[10px] text-slate-400 mt-0.5 block">স্টোরে সংরক্ষিত বিভাগ</span>
+          <span className="text-[11px] text-slate-400 mt-0.5 block">স্টোরে সংরক্ষিত বিভাগ</span>
         </div>
 
-        <div className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-xs">
+        <div className="bg-white border border-slate-200/80 rounded-[12px] p-4 shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-              সক্রিয় ক্যাটাগরি
-            </span>
-            <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 border border-emerald-100 flex items-center justify-center">
-              <Eye className="w-3.5 h-3.5" />
+            <span className="text-[11px] font-semibold text-slate-500">সক্রিয় ক্যাটাগরি</span>
+            <div className="w-8 h-8 rounded-[8px] bg-[#ECFDF3] text-[#15803D] border border-emerald-200/70 flex items-center justify-center">
+              <Eye className="w-4 h-4" />
             </div>
           </div>
-          <div className="mt-2 text-2xl font-extrabold text-emerald-600 font-display tabular-nums">
+          <div className="mt-2 text-2xl font-extrabold text-[#16A34A] font-display tabular-nums">
             {activeCategoriesCount}
           </div>
-          <span className="text-[10px] text-slate-400 mt-0.5 block">স্টোরফ্রন্টে প্রদর্শিত</span>
+          <span className="text-[11px] text-slate-400 mt-0.5 block">স্টোরফ্রন্টে প্রদর্শিত</span>
         </div>
 
-        <div className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-xs">
+        <div className="bg-white border border-slate-200/80 rounded-[12px] p-4 shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-              নিষ্ক্রিয় ক্যাটাগরি
-            </span>
-            <div className="w-7 h-7 rounded-lg bg-slate-100 text-slate-500 flex items-center justify-center">
-              <EyeOff className="w-3.5 h-3.5" />
+            <span className="text-[11px] font-semibold text-slate-500">নিষ্ক্রিয় ক্যাটাগরি</span>
+            <div className="w-8 h-8 rounded-[8px] bg-slate-100 text-slate-500 border border-slate-200/70 flex items-center justify-center">
+              <EyeOff className="w-4 h-4" />
             </div>
           </div>
-          <div className="mt-2 text-2xl font-extrabold text-slate-500 font-display tabular-nums">
+          <div className="mt-2 text-2xl font-extrabold text-slate-600 font-display tabular-nums">
             {inactiveCategoriesCount}
           </div>
-          <span className="text-[10px] text-slate-400 mt-0.5 block">গ্রাহকদের থেকে লুকানো</span>
+          <span className="text-[11px] text-slate-400 mt-0.5 block">গ্রাহকদের থেকে লুকানো</span>
         </div>
 
-        <div className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-xs">
+        <div className="bg-white border border-slate-200/80 rounded-[12px] p-4 shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-              মোট যুক্ত পণ্য
-            </span>
-            <div className="w-7 h-7 rounded-lg bg-purple-50 text-purple-600 border border-purple-100 flex items-center justify-center">
-              <Package className="w-3.5 h-3.5" />
+            <span className="text-[11px] font-semibold text-slate-500">মোট যুক্ত পণ্য</span>
+            <div className="w-8 h-8 rounded-[8px] bg-slate-100 text-slate-700 border border-slate-200/70 flex items-center justify-center">
+              <Package className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-2 text-2xl font-extrabold text-slate-900 font-display tabular-nums">
             {products.length}
           </div>
-          <span className="text-[10px] text-slate-400 mt-0.5 block">ক্যাটালগ পণ্য</span>
+          <span className="text-[11px] text-slate-400 mt-0.5 block">ক্যাটালগ পণ্য</span>
         </div>
       </div>
 
       {/* Quick Add Bar */}
-      <div className="bg-white border border-slate-200/80 rounded-2xl p-4 sm:p-5 shadow-xs">
+      <div className="bg-white border border-slate-200/80 rounded-[12px] p-4 sm:p-5 shadow-xs">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-            <Plus className="w-3.5 h-3.5 text-blue-600" />
-            <span>+ Add New Category (দ্রুত নতুন ক্যাটাগরি তৈরি)</span>
+            <Plus className="w-3.5 h-3.5 text-[#16A34A]" />
+            <span>দ্রুত নতুন ক্যাটাগরি তৈরি</span>
           </h3>
           <span className="text-[11px] text-slate-400 hidden sm:inline">
-            ইংরেজি ও বাংলা নাম লিখে সংরক্ষণ করুন
+            ইংরেজি ও বাংলা নাম লিখে সরাসরি সংরক্ষণ করুন
           </span>
         </div>
 
@@ -378,7 +361,7 @@ export const CategoryManagementTab: React.FC<CategoryManagementTabProps> = ({
               value={quickName}
               onChange={(e) => setQuickName(e.target.value)}
               placeholder="ক্যাটাগরির নাম (English, e.g. Smart Watches) *"
-              className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white transition-colors"
+              className="w-full px-3.5 py-2 text-xs bg-[#F8FAF9] border border-slate-200 rounded-[10px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-[#16A34A] focus:ring-2 focus:ring-[#16A34A]/15 focus:bg-white transition-colors"
             />
           </div>
 
@@ -388,14 +371,14 @@ export const CategoryManagementTab: React.FC<CategoryManagementTabProps> = ({
               value={quickBengaliName}
               onChange={(e) => setQuickBengaliName(e.target.value)}
               placeholder="বাংলা নাম (যেমন: স্মার্ট ওয়াচ ও ব্যান্ড)"
-              className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white transition-colors font-bengali"
+              className="w-full px-3.5 py-2 text-xs bg-[#F8FAF9] border border-slate-200 rounded-[10px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-[#16A34A] focus:ring-2 focus:ring-[#16A34A]/15 focus:bg-white transition-colors font-bengali"
             />
           </div>
 
           <button
             type="submit"
             disabled={isQuickSubmitting || !quickName.trim()}
-            className="px-5 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 active:scale-[0.98] rounded-xl transition-all shadow-xs disabled:opacity-50 shrink-0 flex items-center justify-center gap-1.5"
+            className="px-5 py-2 text-xs font-semibold text-white bg-[#16A34A] hover:bg-[#15803D] rounded-[10px] transition-colors shadow-xs disabled:opacity-50 shrink-0 flex items-center justify-center gap-1.5 whitespace-nowrap"
           >
             {isQuickSubmitting ? (
               <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -407,18 +390,17 @@ export const CategoryManagementTab: React.FC<CategoryManagementTabProps> = ({
         </form>
       </div>
 
-      {/* Categories Table & Sorting (Requirements 3, 4, 5) */}
-      <div className="bg-white border border-slate-200/80 rounded-2xl overflow-hidden shadow-xs">
-        
+      {/* Categories Table & Sorting */}
+      <div className="bg-white border border-slate-200/80 rounded-[12px] overflow-hidden shadow-xs">
         {/* Table Controls */}
-        <div className="p-4 sm:p-5 border-b border-slate-200/80 flex flex-col md:flex-row md:items-center justify-between gap-3 bg-slate-50/60">
+        <div className="p-4 sm:p-5 border-b border-slate-200/80 flex flex-col md:flex-row md:items-center justify-between gap-3 bg-[#F8FAF9]">
           <div className="flex items-center gap-2">
-            <SlidersHorizontal className="w-4 h-4 text-blue-600" />
+            <SlidersHorizontal className="w-4 h-4 text-[#16A34A]" />
             <h3 className="text-sm font-bold text-slate-900 font-display">
               ক্যাটাগরি তালিকা ও প্রদর্শন ক্রম ({filteredCategories.length})
             </h3>
             {isReordering && (
-              <span className="text-[10px] text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full animate-pulse border border-blue-100">
+              <span className="text-[10px] text-[#15803D] bg-[#ECFDF3] px-2 py-0.5 rounded-[6px] border border-emerald-200">
                 ক্রম সংরক্ষিত হচ্ছে...
               </span>
             )}
@@ -433,18 +415,18 @@ export const CategoryManagementTab: React.FC<CategoryManagementTabProps> = ({
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="ক্যাটাগরি খুঁজুন..."
-                className="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-500"
+                className="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-slate-200 rounded-[10px] text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-[#16A34A] focus:ring-2 focus:ring-[#16A34A]/15"
               />
             </div>
 
-            {/* Filter Pills */}
-            <div className="flex items-center bg-slate-100 border border-slate-200 rounded-xl p-0.5 text-xs">
+            {/* Filter Tabs */}
+            <div className="flex items-center bg-white border border-slate-200 rounded-[10px] p-0.5 text-xs">
               <button
                 type="button"
                 onClick={() => setStatusFilter('all')}
-                className={`px-2.5 py-1 rounded-lg transition-colors font-medium text-[11px] ${
+                className={`px-2.5 py-1 rounded-[8px] transition-colors font-medium text-[11px] whitespace-nowrap ${
                   statusFilter === 'all'
-                    ? 'bg-white text-slate-900 shadow-2xs font-bold'
+                    ? 'bg-[#ECFDF3] text-[#15803D] font-bold'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
@@ -453,9 +435,9 @@ export const CategoryManagementTab: React.FC<CategoryManagementTabProps> = ({
               <button
                 type="button"
                 onClick={() => setStatusFilter('active')}
-                className={`px-2.5 py-1 rounded-lg transition-colors font-medium text-[11px] ${
+                className={`px-2.5 py-1 rounded-[8px] transition-colors font-medium text-[11px] whitespace-nowrap ${
                   statusFilter === 'active'
-                    ? 'bg-white text-emerald-700 shadow-2xs font-bold'
+                    ? 'bg-[#ECFDF3] text-[#15803D] font-bold'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
@@ -464,9 +446,9 @@ export const CategoryManagementTab: React.FC<CategoryManagementTabProps> = ({
               <button
                 type="button"
                 onClick={() => setStatusFilter('inactive')}
-                className={`px-2.5 py-1 rounded-lg transition-colors font-medium text-[11px] ${
+                className={`px-2.5 py-1 rounded-[8px] transition-colors font-medium text-[11px] whitespace-nowrap ${
                   statusFilter === 'inactive'
-                    ? 'bg-white text-slate-700 shadow-2xs font-bold'
+                    ? 'bg-slate-100 text-slate-800 font-bold'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
@@ -480,7 +462,7 @@ export const CategoryManagementTab: React.FC<CategoryManagementTabProps> = ({
         {filteredCategories.length === 0 ? (
           <div className="p-12 text-center text-slate-400">
             <Layers className="w-8 h-8 mx-auto mb-2 opacity-40 text-slate-500" />
-            <p className="text-xs">কোনো ক্যাটাগরি পাওয়া যায়নি</p>
+            <p className="text-xs font-medium text-slate-600">কোনো ক্যাটাগরি পাওয়া যায়নি</p>
           </div>
         ) : (
           <div className="divide-y divide-slate-100">
@@ -496,14 +478,12 @@ export const CategoryManagementTab: React.FC<CategoryManagementTabProps> = ({
                   onDragStart={(e) => handleDragStart(e, index)}
                   onDragOver={(e) => handleDragOver(e, index)}
                   onDragEnd={handleDrop}
-                  className={`p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50/75 transition-all cursor-move ${
+                  className={`p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-[#F8FAF9] transition-colors cursor-move ${
                     draggedIndex === index ? 'opacity-40 bg-slate-100' : ''
                   }`}
                 >
                   {/* Left: Drag Handle, Icon, Thumbnail, Details */}
                   <div className="flex items-center gap-3 min-w-0">
-                    
-                    {/* Grip Handle for Drag & Drop */}
                     <div
                       className="p-1 text-slate-400 hover:text-slate-700 cursor-grab active:cursor-grabbing shrink-0"
                       title="ড্র্যাগ করে ক্রম সাজান"
@@ -534,16 +514,16 @@ export const CategoryManagementTab: React.FC<CategoryManagementTabProps> = ({
                     </div>
 
                     {/* Order Number */}
-                    <span className="text-[10px] font-mono text-slate-400 w-5 shrink-0 text-center font-bold">
+                    <span className="text-[10px] font-mono text-slate-400 w-5 shrink-0 text-center font-bold tabular-nums">
                       #{index + 1}
                     </span>
 
                     {/* Icon or Thumbnail */}
-                    <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-center overflow-hidden shrink-0 relative">
+                    <div className="w-10 h-10 rounded-[10px] bg-[#ECFDF3] border border-emerald-200/70 flex items-center justify-center overflow-hidden shrink-0">
                       {cat.image ? (
                         <img src={cat.image} alt={cat.name} className="w-full h-full object-cover" />
                       ) : (
-                        <div className="text-blue-600">
+                        <div className="text-[#16A34A]">
                           {renderCategoryIcon(cat.icon, 'w-5 h-5')}
                         </div>
                       )}
@@ -561,7 +541,7 @@ export const CategoryManagementTab: React.FC<CategoryManagementTabProps> = ({
                           </span>
                         )}
                         {!isActive && (
-                          <span className="px-1.5 py-0.5 text-[9px] uppercase font-bold text-slate-500 bg-slate-100 rounded border border-slate-200">
+                          <span className="px-1.5 py-0.5 text-[9px] uppercase font-bold text-slate-500 bg-slate-100 rounded-[6px] border border-slate-200">
                             নিষ্ক্রিয়
                           </span>
                         )}
@@ -570,7 +550,7 @@ export const CategoryManagementTab: React.FC<CategoryManagementTabProps> = ({
                       <div className="flex items-center gap-2 text-[11px] text-slate-500 mt-0.5">
                         <span className="font-mono text-[10px]">/{cat.slug}</span>
                         <span>•</span>
-                        <span className="flex items-center gap-1 text-emerald-700 font-medium">
+                        <span className="flex items-center gap-1 text-[#15803D] font-medium tabular-nums">
                           <Package className="w-3 h-3" />
                           <span>{cat.productCount} টি প্রোডাক্ট</span>
                         </span>
@@ -588,14 +568,12 @@ export const CategoryManagementTab: React.FC<CategoryManagementTabProps> = ({
 
                   {/* Right: Actions */}
                   <div className="flex items-center justify-end gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
-                    
-                    {/* Active/Inactive Toggle Button */}
                     <button
                       type="button"
                       onClick={() => handleToggleActive(cat)}
-                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors border ${
+                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-[8px] text-xs font-semibold transition-colors border whitespace-nowrap ${
                         isActive
-                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                          ? 'bg-[#ECFDF3] text-[#15803D] border-emerald-200 hover:bg-emerald-100'
                           : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
                       }`}
                       title={isActive ? 'ক্যাটাগরি নিষ্ক্রিয় করতে ক্লিক করুন' : 'ক্যাটাগরি সক্রিয় করতে ক্লিক করুন'}
@@ -604,21 +582,19 @@ export const CategoryManagementTab: React.FC<CategoryManagementTabProps> = ({
                       <span>{isActive ? 'সক্রিয়' : 'লুকানো'}</span>
                     </button>
 
-                    {/* Edit Button */}
                     <button
                       type="button"
                       onClick={() => handleOpenEditModal(cat)}
-                      className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors border border-slate-200"
+                      className="p-1.5 text-slate-500 hover:text-[#15803D] hover:bg-[#ECFDF3] rounded-[8px] transition-colors border border-slate-200"
                       title={`${cat.name} সম্পাদনা করুন`}
                     >
                       <Edit2 className="w-3.5 h-3.5" />
                     </button>
 
-                    {/* Delete Button */}
                     <button
                       type="button"
                       onClick={() => handleOpenDeleteModal(cat)}
-                      className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors border border-slate-200"
+                      className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-[8px] transition-colors border border-slate-200"
                       title={`${cat.name} মুছে ফেলুন`}
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -643,7 +619,7 @@ export const CategoryManagementTab: React.FC<CategoryManagementTabProps> = ({
         allCategories={categories}
       />
 
-      {/* Accidental Deletion Prevention & Reassignment Modal (Requirement 9) */}
+      {/* Safe Deletion & Reassignment Modal */}
       <CategoryDeleteModal
         isOpen={isDeleteModalOpen}
         onClose={() => {
@@ -655,7 +631,6 @@ export const CategoryManagementTab: React.FC<CategoryManagementTabProps> = ({
         availableCategories={categories}
         isDeleting={isDeleting}
       />
-
     </div>
   );
 };

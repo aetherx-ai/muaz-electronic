@@ -15,6 +15,42 @@ import {
   DEFAULT_STORE_SETTINGS,
   INITIAL_ORDERS,
 } from '../data/products';
+import {
+  CLOTHING_SIZES,
+  computeTotalStockFromSizes,
+  extractSizeInventoryFromSpecs,
+  hasEnabledSizes,
+  mergeSizeInventoryIntoSpecs,
+  normalizeSizeInventory,
+  sanitizeWholeStock,
+  stripInternalSpecs,
+} from './sizeInventory';
+
+function isMissingSizeInventoryColumnError(error: { code?: string; message?: string } | null | undefined): boolean {
+  if (!error) return false;
+  const msg = (error.message || '').toLowerCase();
+  return (
+    error.code === 'PGRST204' ||
+    error.code === '42703' ||
+    (msg.includes('size_inventory') && (msg.includes('schema cache') || msg.includes('column') || msg.includes('does not exist')))
+  );
+}
+
+function normalizeProductRecord(prod: Product): Product {
+  const normalizedSizes =
+    normalizeSizeInventory(prod.sizeInventory) ||
+    extractSizeInventoryFromSpecs(prod.specs);
+  const hasSizes = Boolean(normalizedSizes);
+  return {
+    ...prod,
+    hasSizes,
+    sizeInventory: normalizedSizes,
+    specs: stripInternalSpecs(prod.specs),
+    stock: hasSizes
+      ? computeTotalStockFromSizes(normalizedSizes)
+      : sanitizeWholeStock(prod.stock),
+  };
+}
 
 // -----------------------------------------------------------------------------
 // SUPABASE CONFIGURATION
@@ -334,9 +370,23 @@ export const productService = {
       console.error('Unable to load public products:', error?.message);
     }
 
-    return getLocalProducts().filter(
-      (product) => product.status === 'published',
-    );
+    try {
+      const res = await fetch('/api/products');
+      if (res.ok) {
+        const data = (await res.json()) as Product[];
+        if (Array.isArray(data)) {
+          return data
+            .filter((product) => product.status === 'published')
+            .map(normalizeProductRecord);
+        }
+      }
+    } catch {
+      // Fall back to localStorage only if server is unreachable
+    }
+
+    return getLocalProducts()
+      .filter((product) => product.status === 'published')
+      .map(normalizeProductRecord);
   },
 
   async getAllProductsAdmin(): Promise<Product[]> {
@@ -353,7 +403,19 @@ export const productService = {
       console.error('Unable to load admin products:', error?.message);
     }
 
-    return getLocalProducts();
+    try {
+      const res = await fetch('/api/products');
+      if (res.ok) {
+        const data = (await res.json()) as Product[];
+        if (Array.isArray(data)) {
+          return data.map(normalizeProductRecord);
+        }
+      }
+    } catch {
+      // Fall back to localStorage only if server is unreachable
+    }
+
+    return getLocalProducts().map(normalizeProductRecord);
   },
 
   async getProductById(id: string): Promise<Product | null> {
@@ -369,7 +431,18 @@ export const productService = {
       }
     }
 
-    return getLocalProducts().find((product) => product.id === id) || null;
+    try {
+      const res = await fetch(`/api/products/${encodeURIComponent(id)}`);
+      if (res.ok) {
+        const data = (await res.json()) as Product;
+        return normalizeProductRecord(data);
+      }
+    } catch {
+      // Fall back to localStorage only if server is unreachable
+    }
+
+    const local = getLocalProducts().find((product) => product.id === id);
+    return local ? normalizeProductRecord(local) : null;
   },
 
   async createProduct(
@@ -379,42 +452,70 @@ export const productService = {
     try {
       let imageUrl = productData.image;
 
-      if (imageFile) {
-        const upload = await this.uploadProductImage(imageFile);
+      if (isSupabaseConfigured && supabase) {
+        if (imageFile) {
+          const upload = await this.uploadProductImage(imageFile);
 
-        if (upload.error || !upload.url) {
+          if (upload.error || !upload.url) {
+            return {
+              product: null,
+              error: upload.error || 'ছবির URL পাওয়া যায়নি।',
+              success: false,
+            };
+          }
+
+          imageUrl = upload.url;
+        } else if (isBase64Image(imageUrl)) {
           return {
             product: null,
-            error: upload.error || 'ছবির URL পাওয়া যায়নি।',
+            error: 'Base64 ছবি সরাসরি সংরক্ষণ করা যাবে না। ছবিটি আবার upload করুন।',
             success: false,
           };
         }
-
-        imageUrl = upload.url;
-      } else if (isBase64Image(imageUrl)) {
-        return {
-          product: null,
-          error: 'Base64 ছবি সরাসরি সংরক্ষণ করা যাবে না। ছবিটি আবার upload করুন।',
-          success: false,
-        };
       }
+
+      const normalizedSizes = normalizeSizeInventory(productData.sizeInventory);
+      const hasSizes = Boolean(normalizedSizes);
+      const computedStock = hasSizes
+        ? computeTotalStockFromSizes(normalizedSizes)
+        : sanitizeWholeStock(productData.stock);
 
       const now = new Date().toISOString();
 
       const newProduct: Product = {
         ...productData,
         id: `product-${Date.now()}`,
+        stock: computedStock,
+        hasSizes,
+        sizeInventory: normalizedSizes,
         image: imageUrl,
         createdAt: now,
         updatedAt: now,
       };
 
       if (isSupabaseConfigured && supabase) {
-        const { data, error } = await supabase
+        const dbPayload = mapProductToDbPayload(newProduct);
+        let { data, error } = await supabase
           .from('products')
-          .insert([mapProductToDbPayload(newProduct)])
+          .insert([dbPayload])
           .select()
           .single();
+
+        if (error && isMissingSizeInventoryColumnError(error)) {
+          const fallbackPayload = { ...dbPayload };
+          delete fallbackPayload.size_inventory;
+          fallbackPayload.specs = mergeSizeInventoryIntoSpecs(
+            newProduct.specs,
+            newProduct.sizeInventory
+          );
+          const retry = await supabase
+            .from('products')
+            .insert([fallbackPayload])
+            .select()
+            .single();
+          data = retry.data;
+          error = retry.error;
+        }
 
         if (error) {
           return {
@@ -431,11 +532,30 @@ export const productService = {
         };
       }
 
-      // Local fallback is retained for non-authenticated demo/storefront data.
-      const products = getLocalProducts();
-      saveLocalProducts([newProduct, ...products]);
-
-      return { product: newProduct, error: null, success: true };
+      // Express filesystem persistence (/api/products -> data/db.json)
+      try {
+        const res = await fetch('/api/products', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newProduct),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const savedProduct = normalizeProductRecord(data.product || newProduct);
+          return { product: savedProduct, error: null, success: true };
+        } else {
+          const errData = await res.json().catch(() => ({}));
+          return {
+            product: null,
+            error: errData.error || 'প্রোডাক্ট সংরক্ষণ ব্যর্থ হয়েছে',
+            success: false,
+          };
+        }
+      } catch {
+        const products = getLocalProducts();
+        saveLocalProducts([newProduct, ...products]);
+        return { product: newProduct, error: null, success: true };
+      }
     } catch (error: unknown) {
       const message =
         error instanceof Error ? error.message : 'প্রোডাক্ট তৈরিতে সমস্যা হয়েছে';
@@ -452,7 +572,7 @@ export const productService = {
     try {
       let imageUrl = productData.image;
 
-      if (imageFile) {
+      if (isSupabaseConfigured && supabase && imageFile) {
         const upload = await this.uploadProductImage(imageFile);
 
         if (upload.error || !upload.url) {
@@ -466,15 +586,35 @@ export const productService = {
         imageUrl = upload.url;
       }
 
+      const hasSizePayload = Object.prototype.hasOwnProperty.call(productData, 'sizeInventory');
+      const normalizedSizes = hasSizePayload
+        ? normalizeSizeInventory(productData.sizeInventory)
+        : undefined;
+
+      const normalizedUpdate: Partial<Product> = {
+        ...productData,
+      };
+
+      if (hasSizePayload) {
+        normalizedUpdate.sizeInventory = normalizedSizes;
+        normalizedUpdate.hasSizes = Boolean(normalizedSizes);
+        if (normalizedSizes) {
+          normalizedUpdate.stock = computeTotalStockFromSizes(normalizedSizes);
+        } else if (productData.stock !== undefined) {
+          normalizedUpdate.stock = sanitizeWholeStock(productData.stock);
+        }
+      } else if (productData.stock !== undefined) {
+        normalizedUpdate.stock = sanitizeWholeStock(productData.stock);
+      }
+
       const now = new Date().toISOString();
 
       if (isSupabaseConfigured && supabase) {
         const payload: Record<string, unknown> = {
-          ...mapPartialProductToDbPayload(productData),
+          ...mapPartialProductToDbPayload(normalizedUpdate),
           updated_at: now,
         };
 
-        // Do not re-submit an old Base64 image while editing other fields.
         if (imageFile && imageUrl) {
           payload.image = imageUrl;
         } else if (imageUrl && !isBase64Image(imageUrl)) {
@@ -483,12 +623,37 @@ export const productService = {
           delete payload.image;
         }
 
-        const { data, error } = await supabase
+        let { data, error } = await supabase
           .from('products')
           .update(payload)
           .eq('id', id)
           .select()
           .single();
+
+        if (error && isMissingSizeInventoryColumnError(error)) {
+          const fallbackPayload = { ...payload };
+          delete fallbackPayload.size_inventory;
+          if (hasSizePayload) {
+            let baseSpecs = Array.isArray(productData.specs) ? productData.specs : undefined;
+            if (!baseSpecs) {
+              const { data: existingRow } = await supabase
+                .from('products')
+                .select('specs')
+                .eq('id', id)
+                .maybeSingle();
+              baseSpecs = Array.isArray(existingRow?.specs) ? existingRow.specs : [];
+            }
+            fallbackPayload.specs = mergeSizeInventoryIntoSpecs(baseSpecs, normalizedSizes);
+          }
+          const retry = await supabase
+            .from('products')
+            .update(fallbackPayload)
+            .eq('id', id)
+            .select()
+            .single();
+          data = retry.data;
+          error = retry.error;
+        }
 
         if (error) {
           return { product: null, error: error.message, success: false };
@@ -501,28 +666,53 @@ export const productService = {
         };
       }
 
-      const products = getLocalProducts();
-      const index = products.findIndex((product) => product.id === id);
+      // Express filesystem persistence
+      try {
+        const res = await fetch(`/api/products/${encodeURIComponent(id)}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...normalizedUpdate,
+            ...(hasSizePayload ? { sizeInventory: normalizedSizes ?? null } : {}),
+            ...(imageUrl ? { image: imageUrl } : {}),
+          }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const savedProduct = normalizeProductRecord(data.product);
+          return { product: savedProduct, error: null, success: true };
+        } else {
+          const errData = await res.json().catch(() => ({}));
+          return {
+            product: null,
+            error: errData.error || 'প্রোডাক্ট আপডেট ব্যর্থ হয়েছে',
+            success: false,
+          };
+        }
+      } catch {
+        const products = getLocalProducts();
+        const index = products.findIndex((product) => product.id === id);
 
-      if (index === -1) {
-        return {
-          product: null,
-          error: 'প্রোডাক্টটি খুঁজে পাওয়া যায়নি',
-          success: false,
-        };
+        if (index === -1) {
+          return {
+            product: null,
+            error: 'প্রোডাক্টটি খুঁজে পাওয়া যায়নি',
+            success: false,
+          };
+        }
+
+        const updatedProduct = normalizeProductRecord({
+          ...products[index],
+          ...normalizedUpdate,
+          ...(imageUrl && !isBase64Image(imageUrl) ? { image: imageUrl } : {}),
+          updatedAt: now,
+        });
+
+        products[index] = updatedProduct;
+        saveLocalProducts(products);
+
+        return { product: updatedProduct, error: null, success: true };
       }
-
-      const updatedProduct: Product = {
-        ...products[index],
-        ...productData,
-        ...(imageUrl && !isBase64Image(imageUrl) ? { image: imageUrl } : {}),
-        updatedAt: now,
-      };
-
-      products[index] = updatedProduct;
-      saveLocalProducts(products);
-
-      return { product: updatedProduct, error: null, success: true };
     } catch (error: unknown) {
       const message =
         error instanceof Error ? error.message : 'প্রোডাক্ট আপডেটে সমস্যা হয়েছে';
@@ -546,6 +736,17 @@ export const productService = {
         }
 
         return { success: true, error: null };
+      }
+
+      try {
+        const res = await fetch(`/api/products/${encodeURIComponent(id)}`, {
+          method: 'DELETE',
+        });
+        if (res.ok) {
+          return { success: true, error: null };
+        }
+      } catch {
+        // Fallback below
       }
 
       const products = getLocalProducts().filter(
@@ -1181,12 +1382,24 @@ export const orderService = {
           .select('*')
           .order('created_at', { ascending: false });
 
-        if (!error && Array.isArray(data) && data.length > 0) {
+        if (!error && Array.isArray(data)) {
           return data.map(mapDbOrderToOrder);
         }
       } catch (err) {
-        console.warn('Supabase orders fetch fallback to persistent store:', err);
+        console.warn('Supabase orders fetch fallback to API:', err);
       }
+    }
+
+    try {
+      const res = await fetch('/api/orders');
+      if (res.ok) {
+        const data = (await res.json()) as CustomerOrder[];
+        if (Array.isArray(data)) {
+          return data;
+        }
+      }
+    } catch {
+      // Fall back to localStorage only if server unreachable
     }
 
     return getLocalOrders();
@@ -1195,52 +1408,236 @@ export const orderService = {
   async createOrder(
     payload: Omit<CustomerOrder, 'id' | 'orderNumber' | 'createdAt'> & { orderNumber?: string }
   ): Promise<{ success: boolean; order?: CustomerOrder; error?: string }> {
+    if (!payload.items || payload.items.length === 0) {
+      return { success: false, error: 'অর্ডারে কোনো পণ্য নেই।' };
+    }
+
     const orderNumber = payload.orderNumber || `ME-${Date.now().toString().slice(-6)}`;
+    const now = new Date().toISOString();
     const newOrder: CustomerOrder = {
       ...payload,
-      id: `ord-${orderNumber.toLowerCase()}`,
+      id: `ord-${orderNumber.toLowerCase()}-${Math.random().toString(36).slice(2, 6)}`,
       orderNumber,
       status: payload.status || 'pending',
       paymentStatus: payload.paymentStatus || 'cod',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      stockDeducted: true,
+      createdAt: now,
+      updatedAt: now,
     };
 
     if (isSupabaseConfigured && supabase) {
+      const dbOrderPayload = {
+        id: newOrder.id,
+        order_number: newOrder.orderNumber,
+        customer_name: newOrder.customerName,
+        phone_number: newOrder.phoneNumber,
+        delivery_address: newOrder.deliveryAddress,
+        delivery_area: newOrder.deliveryArea,
+        notes: newOrder.notes || null,
+        items: newOrder.items,
+        subtotal: newOrder.subtotal,
+        delivery_fee: newOrder.deliveryFee,
+        total: newOrder.total,
+        status: newOrder.status,
+        payment_status: newOrder.paymentStatus,
+        order_date: newOrder.orderDate || now,
+      };
+
+      const { data: rpcData, error: rpcError } = await supabase.rpc(
+        'place_order_with_stock_deduction',
+        { p_order: dbOrderPayload }
+      );
+
+      if (!rpcError && rpcData) {
+        return { success: true, order: mapDbOrderToOrder(rpcData) };
+      }
+
+      // Check if RPC isn't deployed yet on this Supabase project
+      const rpcMissing =
+        rpcError?.code === '42883' ||
+        rpcError?.code === 'PGRST202' ||
+        rpcError?.message?.toLowerCase().includes('could not find the function');
+
+      if (rpcError && !rpcMissing) {
+        return {
+          success: false,
+          error: rpcError.message || 'অর্ডার সম্পন্ন করা যায়নি। পর্যাপ্ত স্টক আছে কিনা যাচাই করুন।',
+        };
+      }
+
+      // Safe fallback when RPC is not installed yet: validate stock & deduct before inserting order
+      const deductedSnapshots: Array<{ id: string; prevStock: number; prevSizes: any }> = [];
       try {
-        const { data, error } = await supabase
+        for (const item of newOrder.items) {
+          const { data: dbProd, error: fetchErr } = await supabase
+            .from('products')
+            .select('*')
+            .eq('id', item.product.id)
+            .single();
+
+          if (fetchErr || !dbProd) {
+            throw new Error(`"${item.product.name}" স্টোরে পাওয়া যায়নি।`);
+          }
+
+          const mappedProd = mapDbProductToProduct(dbProd);
+          const qty = sanitizeWholeStock(item.quantity);
+          if (qty <= 0) throw new Error('অবৈধ পণ্যের পরিমাণ।');
+
+          deductedSnapshots.push({
+            id: mappedProd.id,
+            prevStock: mappedProd.stock,
+            prevSizes: mappedProd.sizeInventory || null,
+          });
+
+          if (hasEnabledSizes(mappedProd)) {
+            if (!item.selectedSize || !mappedProd.sizeInventory?.[item.selectedSize]?.enabled) {
+              throw new Error(`"${mappedProd.name}" এর জন্য অনুগ্রহ করে একটি বৈধ সাইজ নির্বাচন করুন।`);
+            }
+            const avail = sanitizeWholeStock(mappedProd.sizeInventory[item.selectedSize]!.stock);
+            if (qty > avail) {
+              throw new Error(
+                `"${mappedProd.name}" (সাইজ: ${item.selectedSize}) পর্যাপ্ত স্টক নেই (উপলব্ধ: ${avail} টি)।`
+              );
+            }
+            const nextSizes = {
+              ...mappedProd.sizeInventory,
+              [item.selectedSize]: { enabled: true, stock: avail - qty },
+            };
+            const nextTotal = computeTotalStockFromSizes(nextSizes);
+            let { error: updErr } = await supabase
+              .from('products')
+              .update({ size_inventory: nextSizes, stock: nextTotal, updated_at: now })
+              .eq('id', mappedProd.id);
+            if (updErr && isMissingSizeInventoryColumnError(updErr)) {
+              const retryUpd = await supabase
+                .from('products')
+                .update({
+                  stock: nextTotal,
+                  specs: mergeSizeInventoryIntoSpecs(dbProd.specs, nextSizes),
+                  updated_at: now,
+                })
+                .eq('id', mappedProd.id);
+              updErr = retryUpd.error;
+            }
+            if (updErr) throw new Error(updErr.message);
+          } else {
+            if (qty > mappedProd.stock) {
+              throw new Error(
+                `"${mappedProd.name}" পর্যাপ্ত স্টক নেই (উপলব্ধ: ${mappedProd.stock} টি)।`
+              );
+            }
+            const { error: updErr } = await supabase
+              .from('products')
+              .update({ stock: mappedProd.stock - qty, updated_at: now })
+              .eq('id', mappedProd.id);
+            if (updErr) throw new Error(updErr.message);
+          }
+        }
+
+        const { data: insertedOrder, error: insertErr } = await supabase
           .from('orders')
-          .insert({
-            id: newOrder.id,
-            order_number: newOrder.orderNumber,
-            customer_name: newOrder.customerName,
-            phone_number: newOrder.phoneNumber,
-            delivery_address: newOrder.deliveryAddress,
-            delivery_area: newOrder.deliveryArea,
-            notes: newOrder.notes,
-            items: newOrder.items,
-            subtotal: newOrder.subtotal,
-            delivery_fee: newOrder.deliveryFee,
-            total: newOrder.total,
-            status: newOrder.status,
-            payment_status: newOrder.paymentStatus,
-            order_date: newOrder.orderDate,
-          })
+          .insert({ ...dbOrderPayload, stock_deducted: true })
           .select()
           .single();
 
-        if (!error && data) {
-          return { success: true, order: mapDbOrderToOrder(data) };
+        if (insertErr || !insertedOrder) {
+          throw new Error(insertErr?.message || 'অর্ডার সেভ করা যায়নি');
         }
-      } catch (err) {
-        console.warn('Supabase order creation fallback:', err);
+
+        return { success: true, order: mapDbOrderToOrder(insertedOrder) };
+      } catch (err: unknown) {
+        // Roll back any deducted stock on failure
+        for (const snap of deductedSnapshots) {
+          const { error: rbErr } = await supabase
+            .from('products')
+            .update({ stock: snap.prevStock, size_inventory: snap.prevSizes })
+            .eq('id', snap.id);
+          if (rbErr && isMissingSizeInventoryColumnError(rbErr)) {
+            await supabase
+              .from('products')
+              .update({ stock: snap.prevStock })
+              .eq('id', snap.id);
+          }
+        }
+        return {
+          success: false,
+          error: err instanceof Error ? err.message : 'অর্ডার তৈরি ব্যর্থ হয়েছে',
+        };
       }
     }
 
-    const currentOrders = getLocalOrders();
-    const updated = [newOrder, ...currentOrders];
-    saveLocalOrders(updated);
-    return { success: true, order: newOrder };
+    // Express server atomic stock deduction & order creation (/api/orders -> data/db.json)
+    try {
+      const res = await fetch('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newOrder),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
+        return { success: true, order: data.order };
+      }
+      // Explicitly fail on HTTP 4xx/5xx (never bypass server stock rejection!)
+      return {
+        success: false,
+        error: data.error || 'অর্ডার সম্পন্ন করা যায়নি। স্টক যাচাই করে পুনরায় চেষ্টা করুন।',
+      };
+    } catch {
+      // Offline / localStorage fallback only if server unreachable
+      const products = getLocalProducts().map(normalizeProductRecord);
+      for (const item of newOrder.items) {
+        const prod = products.find((p) => p.id === item.product.id);
+        if (!prod) {
+          return { success: false, error: `"${item.product.name}" পাওয়া যায়নি।` };
+        }
+        if (hasEnabledSizes(prod)) {
+          if (!item.selectedSize || !prod.sizeInventory?.[item.selectedSize]?.enabled) {
+            return { success: false, error: `"${prod.name}" এর বৈধ সাইজ নির্বাচন করুন।` };
+          }
+          const avail = sanitizeWholeStock(prod.sizeInventory[item.selectedSize]!.stock);
+          if (item.quantity > avail) {
+            return {
+              success: false,
+              error: `"${prod.name}" (সাইজ: ${item.selectedSize}) পর্যাপ্ত স্টক নেই (উপলব্ধ: ${avail})।`,
+            };
+          }
+        } else if (item.quantity > prod.stock) {
+          return {
+            success: false,
+            error: `"${prod.name}" পর্যাপ্ত স্টক নেই (উপলব্ধ: ${prod.stock})।`,
+          };
+        }
+      }
+
+      const updatedProducts = products.map((prod) => {
+        const matchingItems = newOrder.items.filter((i) => i.product.id === prod.id);
+        if (matchingItems.length === 0) return prod;
+        const cloned = { ...prod };
+        if (hasEnabledSizes(cloned) && cloned.sizeInventory) {
+          const nextInv = { ...cloned.sizeInventory };
+          for (const mi of matchingItems) {
+            if (mi.selectedSize && nextInv[mi.selectedSize]) {
+              nextInv[mi.selectedSize] = {
+                enabled: true,
+                stock: Math.max(0, nextInv[mi.selectedSize]!.stock - mi.quantity),
+              };
+            }
+          }
+          cloned.sizeInventory = nextInv;
+          cloned.stock = computeTotalStockFromSizes(nextInv);
+        } else {
+          const sumQty = matchingItems.reduce((s, i) => s + i.quantity, 0);
+          cloned.stock = Math.max(0, cloned.stock - sumQty);
+        }
+        return cloned;
+      });
+      saveLocalProducts(updatedProducts);
+
+      const currentOrders = getLocalOrders();
+      saveLocalOrders([newOrder, ...currentOrders]);
+      return { success: true, order: newOrder };
+    }
   },
 
   async updateOrderStatus(
@@ -1249,40 +1646,131 @@ export const orderService = {
     paymentStatus?: PaymentStatus
   ): Promise<{ success: boolean; error?: string }> {
     if (isSupabaseConfigured && supabase) {
+      const { error: rpcError } = await supabase.rpc('update_order_status_with_stock', {
+        p_order_id: id,
+        p_status: status,
+        p_payment_status: paymentStatus || null,
+      });
+
+      if (!rpcError) {
+        return { success: true };
+      }
+
+      const rpcMissing =
+        rpcError?.code === '42883' ||
+        rpcError?.code === 'PGRST202' ||
+        rpcError?.message?.toLowerCase().includes('could not find the function');
+
+      if (!rpcMissing) {
+        return { success: false, error: rpcError.message };
+      }
+
       try {
+        const { data: orderRow, error: fetchErr } = await supabase
+          .from('orders')
+          .select('*')
+          .or(`id.eq.${id},order_number.eq.${id}`)
+          .single();
+
+        if (fetchErr || !orderRow) {
+          return { success: false, error: 'অর্ডার পাওয়া যায়নি' };
+        }
+
+        const existingOrder = mapDbOrderToOrder(orderRow);
+        const now = new Date().toISOString();
+        let nextStockDeducted = existingOrder.stockDeducted !== false;
+
+        if (status === 'cancelled' && existingOrder.stockDeducted === true) {
+          for (const item of existingOrder.items) {
+            const { data: prodRow } = await supabase
+              .from('products')
+              .select('*')
+              .eq('id', item.product.id)
+              .single();
+            if (!prodRow) continue;
+            const prod = mapDbProductToProduct(prodRow);
+            const qty = sanitizeWholeStock(item.quantity);
+            if (hasEnabledSizes(prod) && item.selectedSize && prod.sizeInventory?.[item.selectedSize]) {
+              const nextSizes = {
+                ...prod.sizeInventory,
+                [item.selectedSize]: {
+                  enabled: prod.sizeInventory[item.selectedSize]!.enabled,
+                  stock: prod.sizeInventory[item.selectedSize]!.stock + qty,
+                },
+              };
+              const { error: restoreErr } = await supabase
+                .from('products')
+                .update({
+                  size_inventory: nextSizes,
+                  stock: computeTotalStockFromSizes(nextSizes),
+                  updated_at: now,
+                })
+                .eq('id', prod.id);
+              if (restoreErr && isMissingSizeInventoryColumnError(restoreErr)) {
+                await supabase
+                  .from('products')
+                  .update({
+                    stock: computeTotalStockFromSizes(nextSizes),
+                    specs: mergeSizeInventoryIntoSpecs(prodRow.specs, nextSizes),
+                    updated_at: now,
+                  })
+                  .eq('id', prod.id);
+              }
+            } else {
+              await supabase
+                .from('products')
+                .update({ stock: prod.stock + qty, updated_at: now })
+                .eq('id', prod.id);
+            }
+          }
+          nextStockDeducted = false;
+        }
+
         const updateData: Record<string, unknown> = {
           status,
-          updated_at: new Date().toISOString(),
+          stock_deducted: nextStockDeducted,
+          updated_at: now,
         };
         if (paymentStatus) {
           updateData.payment_status = paymentStatus;
         }
-        const { error } = await supabase
-          .from('orders')
-          .update(updateData)
-          .eq('id', id);
-
-        if (!error) {
-          return { success: true };
-        }
+        const { error } = await supabase.from('orders').update(updateData).eq('id', existingOrder.id);
+        if (error) return { success: false, error: error.message };
+        return { success: true };
       } catch (err) {
-        console.warn('Supabase update order status error:', err);
+        return {
+          success: false,
+          error: err instanceof Error ? err.message : 'অর্ডার স্ট্যাটাস আপডেট ব্যর্থ হয়েছে',
+        };
       }
     }
 
-    const currentOrders = getLocalOrders();
-    const index = currentOrders.findIndex((o) => o.id === id || o.orderNumber === id);
-    if (index === -1) {
-      return { success: false, error: 'অর্ডার পাওয়া যায়নি' };
+    try {
+      const res = await fetch(`/api/orders/${encodeURIComponent(id)}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status, paymentStatus }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
+        return { success: true };
+      }
+      return { success: false, error: data.error || 'অর্ডার স্ট্যাটাস পরিবর্তন ব্যর্থ হয়েছে' };
+    } catch {
+      const currentOrders = getLocalOrders();
+      const index = currentOrders.findIndex((o) => o.id === id || o.orderNumber === id);
+      if (index === -1) {
+        return { success: false, error: 'অর্ডার পাওয়া যায়নি' };
+      }
+      currentOrders[index] = {
+        ...currentOrders[index],
+        status,
+        paymentStatus: paymentStatus || currentOrders[index].paymentStatus || 'cod',
+        updatedAt: new Date().toISOString(),
+      };
+      saveLocalOrders(currentOrders);
+      return { success: true };
     }
-    currentOrders[index] = {
-      ...currentOrders[index],
-      status,
-      paymentStatus: paymentStatus || currentOrders[index].paymentStatus || 'cod',
-      updatedAt: new Date().toISOString(),
-    };
-    saveLocalOrders(currentOrders);
-    return { success: true };
   },
 
   async deleteOrder(id: string): Promise<{ success: boolean; error?: string }> {
@@ -1293,6 +1781,15 @@ export const orderService = {
       } catch (err) {
         console.warn('Supabase delete order error:', err);
       }
+    }
+
+    try {
+      const res = await fetch(`/api/orders/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+      });
+      if (res.ok) return { success: true };
+    } catch {
+      // Fallback
     }
 
     const currentOrders = getLocalOrders();
@@ -1318,6 +1815,7 @@ function mapDbOrderToOrder(row: any): CustomerOrder {
     orderDate: row.order_date || row.created_at,
     status: row.status || 'pending',
     paymentStatus: row.payment_status || 'cod',
+    stockDeducted: Boolean(row.stock_deducted),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -1327,6 +1825,10 @@ function mapDbOrderToOrder(row: any): CustomerOrder {
 // DATABASE MAPPING HELPERS
 // -----------------------------------------------------------------------------
 function mapDbProductToProduct(row: any): Product {
+  const normalizedSizes =
+    normalizeSizeInventory(row.size_inventory) ||
+    extractSizeInventoryFromSpecs(row.specs);
+  const hasSizes = Boolean(normalizedSizes);
   return {
     id: row.id,
     name: row.name,
@@ -1335,19 +1837,25 @@ function mapDbProductToProduct(row: any): Product {
     salePrice: row.sale_price ? Number(row.sale_price) : undefined,
     category: row.category,
     brand: row.brand || 'MUAZ ELECTRONIC',
-    stock: Number(row.stock || 0),
+    stock: hasSizes
+      ? computeTotalStockFromSizes(normalizedSizes)
+      : sanitizeWholeStock(row.stock || 0),
+    hasSizes,
+    sizeInventory: normalizedSizes,
     status: row.status || 'published',
     isFeatured: Boolean(row.is_featured),
     image: row.image,
     description: row.description || '',
     features: Array.isArray(row.features) ? row.features : [],
-    specs: Array.isArray(row.specs) ? row.specs : [],
+    specs: stripInternalSpecs(Array.isArray(row.specs) ? row.specs : []),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
 }
 
 function mapProductToDbPayload(product: Product): Record<string, unknown> {
+  const normalizedSizes = normalizeSizeInventory(product.sizeInventory);
+  const hasSizes = Boolean(normalizedSizes);
   const payload: Record<string, unknown> = {
     id: product.id,
     name: product.name,
@@ -1356,13 +1864,16 @@ function mapProductToDbPayload(product: Product): Record<string, unknown> {
     sale_price: product.salePrice || null,
     category: product.category,
     brand: product.brand || 'MUAZ ELECTRONIC',
-    stock: product.stock,
+    stock: hasSizes
+      ? computeTotalStockFromSizes(normalizedSizes)
+      : sanitizeWholeStock(product.stock),
+    size_inventory: normalizedSizes || null,
     status: product.status,
     is_featured: Boolean(product.isFeatured),
     image: product.image,
     description: product.description,
     features: product.features,
-    specs: product.specs || [],
+    specs: stripInternalSpecs(product.specs || []),
   };
 
   return payload;
@@ -1383,7 +1894,16 @@ function mapPartialProductToDbPayload(
   }
   if (product.category !== undefined) payload.category = product.category;
   if (product.brand !== undefined) payload.brand = product.brand;
-  if (product.stock !== undefined) payload.stock = product.stock;
+  if (Object.prototype.hasOwnProperty.call(product, 'sizeInventory')) {
+    const normalizedSizes = normalizeSizeInventory(product.sizeInventory);
+    payload.size_inventory = normalizedSizes || null;
+    if (normalizedSizes) {
+      payload.stock = computeTotalStockFromSizes(normalizedSizes);
+    }
+  }
+  if (product.stock !== undefined && payload.stock === undefined) {
+    payload.stock = sanitizeWholeStock(product.stock);
+  }
   if (product.status !== undefined) payload.status = product.status;
   if (product.isFeatured !== undefined) {
     payload.is_featured = product.isFeatured;
@@ -1391,7 +1911,7 @@ function mapPartialProductToDbPayload(
   if (product.image !== undefined) payload.image = product.image;
   if (product.description !== undefined) payload.description = product.description;
   if (product.features !== undefined) payload.features = product.features;
-  if (product.specs !== undefined) payload.specs = product.specs;
+  if (product.specs !== undefined) payload.specs = stripInternalSpecs(product.specs);
 
   return payload;
 }

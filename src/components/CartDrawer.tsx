@@ -1,6 +1,7 @@
 import React from 'react';
 import { X, Trash2, ShoppingCart, ArrowRight } from 'lucide-react';
 import { useCart } from '../context/CartContext';
+import { getAvailableStockForSize, getEffectiveUnitPrice } from '../lib/sizeInventory';
 
 export const CartDrawer: React.FC = () => {
   const {
@@ -51,7 +52,7 @@ export const CartDrawer: React.FC = () => {
                 </div>
                 <p className="text-base font-bold text-gray-800">আপনার ব্যাগটি খালি রয়েছে</p>
                 <p className="text-xs text-gray-500 mt-1 max-w-xs">
-                  পছন্দের গ্যাজেট নির্বাচন করে ব্যাগে যোগ করুন এবং সহজে অর্ডার সম্পন্ন করুন।
+                  পছন্দের পণ্য নির্বাচন করে ব্যাগে যোগ করুন এবং সহজে অর্ডার সম্পন্ন করুন।
                 </p>
                 <button
                   onClick={() => setIsCartOpen(false)}
@@ -62,10 +63,12 @@ export const CartDrawer: React.FC = () => {
               </div>
             ) : (
               items.map((item) => {
-                const itemEffectivePrice = item.product.salePrice || item.product.price;
+                const itemEffectivePrice = getEffectiveUnitPrice(item.product);
+                const maxStock = getAvailableStockForSize(item.product, item.selectedSize);
+                const canIncrement = maxStock <= 0 ? false : item.quantity < maxStock;
                 return (
                   <div
-                    key={item.product.id}
+                    key={`${item.product.id}-${item.selectedSize || 'default'}`}
                     className="bg-gray-50/70 border border-gray-100 rounded-2xl p-3 flex gap-3 items-center hover:border-gray-200 transition-colors"
                   >
                     <img
@@ -75,9 +78,16 @@ export const CartDrawer: React.FC = () => {
                       referrerPolicy="no-referrer"
                     />
                     <div className="flex-1 min-w-0">
-                      <h4 className="text-xs font-semibold text-gray-900 truncate">
-                        {item.product.name}
-                      </h4>
+                      <div className="flex items-center gap-1.5">
+                        <h4 className="text-xs font-semibold text-gray-900 truncate">
+                          {item.product.name}
+                        </h4>
+                        {item.selectedSize && (
+                          <span className="shrink-0 text-[10px] font-bold bg-emerald-50 text-[#16A34A] border border-emerald-200 px-1.5 py-0.5 rounded-md">
+                            সাইজ: {item.selectedSize}
+                          </span>
+                        )}
+                      </div>
                       <p className="text-xs text-[#16A34A] font-bold mt-0.5 tabular-nums">
                         ৳{itemEffectivePrice.toLocaleString()} × {item.quantity} = ৳
                         {(itemEffectivePrice * item.quantity).toLocaleString()}
@@ -87,7 +97,9 @@ export const CartDrawer: React.FC = () => {
                         {/* Quantity Stepper */}
                         <div className="flex items-center bg-white border border-gray-200 rounded-full overflow-hidden text-xs shadow-2xs">
                           <button
-                            onClick={() => updateQuantity(item.product.id, item.quantity - 1)}
+                            onClick={() =>
+                              updateQuantity(item.product.id, item.quantity - 1, item.selectedSize)
+                            }
                             className="px-2.5 py-0.5 text-gray-600 hover:bg-gray-100"
                           >
                             -
@@ -96,8 +108,11 @@ export const CartDrawer: React.FC = () => {
                             {item.quantity}
                           </span>
                           <button
-                            onClick={() => updateQuantity(item.product.id, item.quantity + 1)}
-                            className="px-2.5 py-0.5 text-gray-600 hover:bg-gray-100"
+                            disabled={!canIncrement}
+                            onClick={() =>
+                              updateQuantity(item.product.id, item.quantity + 1, item.selectedSize)
+                            }
+                            className="px-2.5 py-0.5 text-gray-600 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"
                           >
                             +
                           </button>
@@ -105,7 +120,7 @@ export const CartDrawer: React.FC = () => {
 
                         {/* Remove */}
                         <button
-                          onClick={() => removeFromCart(item.product.id)}
+                          onClick={() => removeFromCart(item.product.id, item.selectedSize)}
                           className="text-gray-400 hover:text-rose-500 p-1 transition-colors"
                           title="রিমুভ করুন"
                         >

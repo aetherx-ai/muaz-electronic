@@ -1,21 +1,16 @@
 import React, { useState, useMemo } from 'react';
 import {
-  BarChart3,
   TrendingUp,
   Coins,
   ShoppingBag,
   Users,
   Printer,
   Download,
-  Calendar,
   Layers,
   MapPin,
   CheckCircle2,
-  Clock,
   Truck,
   CreditCard,
-  Percent,
-  Sparkles,
 } from 'lucide-react';
 import { Product, CustomerOrder } from '../../types';
 
@@ -24,7 +19,7 @@ interface AnalyticsTabProps {
   orders: CustomerOrder[];
 }
 
-export const AnalyticsTab: React.FC<AnalyticsTabProps> = ({ products, orders }) => {
+export const AnalyticsTab: React.FC<AnalyticsTabProps> = ({ orders }) => {
   const [periodFilter, setPeriodFilter] = useState<'30d' | '90d' | 'all'>('all');
 
   // Filter orders by chosen period
@@ -75,8 +70,8 @@ export const AnalyticsTab: React.FC<AnalyticsTabProps> = ({ products, orders }) 
 
     nonCancelledOrders.forEach((o) => {
       o.items.forEach((item) => {
-        const cat = item.product.category || 'Other';
-        const price = item.product.salePrice || item.product.price;
+        const cat = item.product?.category || 'Other';
+        const price = item.product?.salePrice || item.product?.price || 0;
         const qty = item.quantity || 1;
 
         if (!map[cat]) {
@@ -107,12 +102,12 @@ export const AnalyticsTab: React.FC<AnalyticsTabProps> = ({ products, orders }) 
       inside: {
         count: insideDhaka.length,
         revenue: insideDhaka.reduce((s, o) => s + o.total, 0),
-        percentage: Math.round((insideDhaka.length / total) * 100),
+        percentage: nonCancelledOrders.length ? Math.round((insideDhaka.length / total) * 100) : 0,
       },
       outside: {
         count: outsideDhaka.length,
         revenue: outsideDhaka.reduce((s, o) => s + o.total, 0),
-        percentage: Math.round((outsideDhaka.length / total) * 100),
+        percentage: nonCancelledOrders.length ? Math.round((outsideDhaka.length / total) * 100) : 0,
       },
     };
   }, [nonCancelledOrders]);
@@ -126,10 +121,10 @@ export const AnalyticsTab: React.FC<AnalyticsTabProps> = ({ products, orders }) 
     return {
       codCount: cod.length,
       codRevenue: cod.reduce((s, o) => s + o.total, 0),
-      codPercentage: Math.round((cod.length / total) * 100),
+      codPercentage: nonCancelledOrders.length ? Math.round((cod.length / total) * 100) : 0,
       paidCount: paid.length,
       paidRevenue: paid.reduce((s, o) => s + o.total, 0),
-      paidPercentage: Math.round((paid.length / total) * 100),
+      paidPercentage: nonCancelledOrders.length ? Math.round((paid.length / total) * 100) : 0,
     };
   }, [nonCancelledOrders]);
 
@@ -192,44 +187,42 @@ export const AnalyticsTab: React.FC<AnalyticsTabProps> = ({ products, orders }) 
 
   return (
     <div className="space-y-6 animate-in fade-in duration-150">
-      
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl sm:text-2xl font-bold text-slate-900 font-display">
+          <h2 className="text-xl sm:text-2xl font-bold text-slate-900 font-display tracking-tight">
             বিজনেস রিপোর্ট ও সেলস অ্যানালিটিক্স
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            উন্নত ব্যবসায়িক অন্তর্দৃষ্টি, গ্রাহক ব্যয় বিশ্লেষণ ও রেভিনিউ ব্রেকডাউন
+            ব্যবসায়িক প্রবৃদ্ধি, গ্রাহক ব্যয় বিশ্লেষণ ও রেভিনিউ ব্রেকডাউন
           </p>
         </div>
 
         <div className="flex items-center gap-2 self-start sm:self-auto">
-          {/* Period selector */}
           <select
             value={periodFilter}
-            onChange={(e) => setPeriodFilter(e.target.value as any)}
-            className="px-3 py-2 text-xs bg-white border border-slate-200/90 rounded-xl text-slate-800 font-semibold focus:outline-none focus:border-slate-900 shadow-2xs cursor-pointer"
+            onChange={(e) => setPeriodFilter(e.target.value as '30d' | '90d' | 'all')}
+            className="px-3 py-2 text-xs bg-white border border-slate-200 rounded-[10px] text-slate-800 font-semibold focus:outline-none focus:border-[#16A34A] focus:ring-2 focus:ring-[#16A34A]/15 shadow-2xs cursor-pointer"
           >
             <option value="all">সর্বমোট সময় (All Time)</option>
             <option value="90d">গত ৯০ দিন</option>
             <option value="30d">গত ৩০ দিন</option>
           </select>
 
-          {/* Export CSV */}
           <button
+            type="button"
             onClick={handleExportCSV}
-            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200/90 rounded-xl transition-all shadow-2xs cursor-pointer"
+            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-[10px] transition-colors shadow-2xs cursor-pointer whitespace-nowrap"
             title="CSV ডাটা ডাউনলোড করুন"
           >
             <Download className="w-3.5 h-3.5 text-slate-600" />
             <span className="hidden sm:inline">CSV এক্সপোর্ট</span>
           </button>
 
-          {/* Print */}
           <button
+            type="button"
             onClick={handlePrint}
-            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-xl transition-all shadow-2xs cursor-pointer"
+            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-[#16A34A] hover:bg-[#15803D] rounded-[10px] transition-colors shadow-2xs cursor-pointer whitespace-nowrap"
             title="রিপোর্ট প্রিন্ট করুন"
           >
             <Printer className="w-3.5 h-3.5" />
@@ -240,12 +233,10 @@ export const AnalyticsTab: React.FC<AnalyticsTabProps> = ({ products, orders }) 
 
       {/* 5 Core Metrics Strip */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
-        
-        {/* Gross Revenue */}
-        <div className="bg-white border border-slate-200/90 rounded-2xl p-4 shadow-xs">
+        <div className="bg-white border border-slate-200/80 rounded-[12px] p-4 shadow-xs">
           <div className="flex items-center justify-between text-slate-500 mb-2">
             <span className="text-xs font-semibold">গ্রস রেভিনিউ</span>
-            <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl">
+            <div className="p-2 bg-[#ECFDF3] text-[#16A34A] rounded-[8px] border border-emerald-200/70">
               <Coins className="w-4 h-4" />
             </div>
           </div>
@@ -255,11 +246,10 @@ export const AnalyticsTab: React.FC<AnalyticsTabProps> = ({ products, orders }) 
           <span className="text-[11px] text-slate-400 mt-1 block">নিট বিক্রিত মূল্য</span>
         </div>
 
-        {/* Total Orders */}
-        <div className="bg-white border border-slate-200/90 rounded-2xl p-4 shadow-xs">
+        <div className="bg-white border border-slate-200/80 rounded-[12px] p-4 shadow-xs">
           <div className="flex items-center justify-between text-slate-500 mb-2">
             <span className="text-xs font-semibold">সফল অর্ডার</span>
-            <div className="p-2 bg-blue-50 text-blue-600 rounded-xl">
+            <div className="p-2 bg-[#ECFDF3] text-[#15803D] rounded-[8px] border border-emerald-200/70">
               <ShoppingBag className="w-4 h-4" />
             </div>
           </div>
@@ -267,15 +257,14 @@ export const AnalyticsTab: React.FC<AnalyticsTabProps> = ({ products, orders }) 
             {nonCancelledOrders.length}
           </span>
           <span className="text-[11px] text-slate-400 mt-1 block">
-            {totalItemsSold} টি মোট পণ্য ডেলিভার্ড/প্রসেসড
+            {totalItemsSold} টি মোট পণ্য
           </span>
         </div>
 
-        {/* Average Order Value */}
-        <div className="bg-white border border-slate-200/90 rounded-2xl p-4 shadow-xs">
+        <div className="bg-white border border-slate-200/80 rounded-[12px] p-4 shadow-xs">
           <div className="flex items-center justify-between text-slate-500 mb-2">
             <span className="text-xs font-semibold">গড় অর্ডার ভ্যালু (AOV)</span>
-            <div className="p-2 bg-purple-50 text-purple-600 rounded-xl">
+            <div className="p-2 bg-slate-100 text-slate-700 rounded-[8px] border border-slate-200/70">
               <TrendingUp className="w-4 h-4" />
             </div>
           </div>
@@ -285,11 +274,10 @@ export const AnalyticsTab: React.FC<AnalyticsTabProps> = ({ products, orders }) 
           <span className="text-[11px] text-slate-400 mt-1 block">প্রতি অর্ডারে গড় ব্যয়</span>
         </div>
 
-        {/* Shipping Revenue */}
-        <div className="bg-white border border-slate-200/90 rounded-2xl p-4 shadow-xs">
+        <div className="bg-white border border-slate-200/80 rounded-[12px] p-4 shadow-xs">
           <div className="flex items-center justify-between text-slate-500 mb-2">
             <span className="text-xs font-semibold">ডেলিভারি কালেকশন</span>
-            <div className="p-2 bg-amber-50 text-amber-600 rounded-xl">
+            <div className="p-2 bg-amber-50 text-amber-600 rounded-[8px] border border-amber-200/70">
               <Truck className="w-4 h-4" />
             </div>
           </div>
@@ -299,33 +287,30 @@ export const AnalyticsTab: React.FC<AnalyticsTabProps> = ({ products, orders }) 
           <span className="text-[11px] text-slate-400 mt-1 block">কুরিয়ার চার্জ বাবদ আয়</span>
         </div>
 
-        {/* Completion Rate */}
-        <div className="bg-white border border-slate-200/90 rounded-2xl p-4 shadow-xs">
+        <div className="bg-white border border-slate-200/80 rounded-[12px] p-4 shadow-xs">
           <div className="flex items-center justify-between text-slate-500 mb-2">
             <span className="text-xs font-semibold">ডেলিভারি পূর্ণতার হার</span>
-            <div className="p-2 bg-teal-50 text-teal-600 rounded-xl">
+            <div className="p-2 bg-[#ECFDF3] text-[#16A34A] rounded-[8px] border border-emerald-200/70">
               <CheckCircle2 className="w-4 h-4" />
             </div>
           </div>
-          <span className="text-2xl font-bold text-teal-600 font-display tabular-nums block">
+          <span className="text-2xl font-bold text-[#16A34A] font-display tabular-nums block">
             {deliverySuccessRate}%
           </span>
           <span className="text-[11px] text-slate-400 mt-1 block">
             {deliveredOrdersCount} টি সম্পন্ন অর্ডার
           </span>
         </div>
-
       </div>
 
       {/* Two Column Breakdown Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        
         {/* Category Sales Breakdown */}
-        <div className="bg-white border border-slate-200/90 rounded-2xl p-5 sm:p-6 shadow-xs flex flex-col justify-between">
+        <div className="bg-white border border-slate-200/80 rounded-[12px] p-5 sm:p-6 shadow-xs flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between pb-3.5 border-b border-slate-100">
-              <div className="flex items-center gap-2">
-                <div className="p-2 bg-slate-100 text-slate-900 rounded-xl">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-[#ECFDF3] text-[#16A34A] rounded-[8px] border border-emerald-200/70">
                   <Layers className="w-4 h-4" />
                 </div>
                 <div>
@@ -337,30 +322,40 @@ export const AnalyticsTab: React.FC<AnalyticsTabProps> = ({ products, orders }) 
               </div>
             </div>
 
-            <div className="space-y-4 mt-5">
-              {categorySales.map((cat) => (
-                <div key={cat.name} className="space-y-1.5">
-                  <div className="flex items-center justify-between text-xs">
-                    <div>
-                      <span className="font-semibold text-slate-900 block">{cat.name}</span>
-                      <span className="text-[11px] text-slate-400 font-mono">
-                        {cat.units} টি আইটেম • {cat.orders} টি অর্ডার
-                      </span>
+            {categorySales.length === 0 ? (
+              <div className="py-12 text-center">
+                <Layers className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                <p className="text-xs font-medium text-slate-600">এখনো কোনো বিক্রয় ডেটা জমা হয়নি</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  কাস্টমার অর্ডার আসলে ক্যাটাগরি অনুযায়ী বিক্রয় বিশ্লেষণ দেখা যাবে।
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4 mt-5">
+                {categorySales.map((cat) => (
+                  <div key={cat.name} className="space-y-1.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <div>
+                        <span className="font-semibold text-slate-900 block">{cat.name}</span>
+                        <span className="text-[11px] text-slate-400 font-mono">
+                          {cat.units} টি আইটেম • {cat.orders} টি অর্ডার
+                        </span>
+                      </div>
+                      <div className="text-right font-mono tabular-nums">
+                        <span className="font-bold text-slate-900 block">৳{cat.revenue.toLocaleString()}</span>
+                        <span className="text-[11px] text-slate-500">মোট বিক্রয়ের {cat.percentage}%</span>
+                      </div>
                     </div>
-                    <div className="text-right font-mono tabular-nums">
-                      <span className="font-bold text-slate-900 block">৳{cat.revenue.toLocaleString()}</span>
-                      <span className="text-[11px] text-slate-500">মোট বিক্রয়ের {cat.percentage}%</span>
+                    <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-[#16A34A] rounded-full transition-all duration-300"
+                        style={{ width: `${Math.max(6, cat.percentage)}%` }}
+                      />
                     </div>
                   </div>
-                  <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-slate-900 rounded-full transition-all duration-300"
-                      style={{ width: `${Math.max(6, cat.percentage)}%` }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="pt-4 border-t border-slate-100 mt-6 text-[11px] text-slate-400">
@@ -370,11 +365,10 @@ export const AnalyticsTab: React.FC<AnalyticsTabProps> = ({ products, orders }) 
 
         {/* Geographic & Payment Method Split */}
         <div className="space-y-6">
-          
           {/* Delivery Area Breakdown */}
-          <div className="bg-white border border-slate-200/90 rounded-2xl p-5 sm:p-6 shadow-xs">
-            <div className="flex items-center gap-2 pb-3.5 border-b border-slate-100">
-              <div className="p-2 bg-blue-50 text-blue-600 rounded-xl">
+          <div className="bg-white border border-slate-200/80 rounded-[12px] p-5 sm:p-6 shadow-xs">
+            <div className="flex items-center gap-2.5 pb-3.5 border-b border-slate-100">
+              <div className="p-2 bg-[#ECFDF3] text-[#16A34A] rounded-[8px] border border-emerald-200/70">
                 <MapPin className="w-4 h-4" />
               </div>
               <div>
@@ -386,22 +380,22 @@ export const AnalyticsTab: React.FC<AnalyticsTabProps> = ({ products, orders }) 
             </div>
 
             <div className="grid grid-cols-2 gap-4 mt-4">
-              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/70 space-y-1">
-                <span className="text-xs font-semibold text-slate-700 block">ঢাকার ভেতরে (৳৭০)</span>
+              <div className="p-4 bg-[#F8FAF9] rounded-[10px] border border-slate-200/70 space-y-1">
+                <span className="text-xs font-semibold text-slate-700 block">ঢাকার ভেতরে</span>
                 <span className="text-xl font-bold text-slate-900 font-display tabular-nums block">
                   {areaDistribution.inside.count} টি অর্ডার
                 </span>
-                <div className="text-[11px] text-slate-500 font-mono">
+                <div className="text-[11px] text-slate-500 font-mono tabular-nums">
                   রেভিনিউ: ৳{areaDistribution.inside.revenue.toLocaleString()} ({areaDistribution.inside.percentage}%)
                 </div>
               </div>
 
-              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/70 space-y-1">
-                <span className="text-xs font-semibold text-slate-700 block">ঢাকার বাইরে (৳১৩০)</span>
+              <div className="p-4 bg-[#F8FAF9] rounded-[10px] border border-slate-200/70 space-y-1">
+                <span className="text-xs font-semibold text-slate-700 block">ঢাকার বাইরে</span>
                 <span className="text-xl font-bold text-slate-900 font-display tabular-nums block">
                   {areaDistribution.outside.count} টি অর্ডার
                 </span>
-                <div className="text-[11px] text-slate-500 font-mono">
+                <div className="text-[11px] text-slate-500 font-mono tabular-nums">
                   রেভিনিউ: ৳{areaDistribution.outside.revenue.toLocaleString()} ({areaDistribution.outside.percentage}%)
                 </div>
               </div>
@@ -409,115 +403,120 @@ export const AnalyticsTab: React.FC<AnalyticsTabProps> = ({ products, orders }) 
           </div>
 
           {/* Payment Method Distribution */}
-          <div className="bg-white border border-slate-200/90 rounded-2xl p-5 sm:p-6 shadow-xs">
-            <div className="flex items-center gap-2 pb-3.5 border-b border-slate-100">
-              <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl">
+          <div className="bg-white border border-slate-200/80 rounded-[12px] p-5 sm:p-6 shadow-xs">
+            <div className="flex items-center gap-2.5 pb-3.5 border-b border-slate-100">
+              <div className="p-2 bg-[#ECFDF3] text-[#15803D] rounded-[8px] border border-emerald-200/70">
                 <CreditCard className="w-4 h-4" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-slate-900 font-display">
-                  পেমেন্ট মেথড অনুপাত
-                </h3>
+                <h3 className="text-sm font-bold text-slate-900 font-display">পেমেন্ট মেথড অনুপাত</h3>
                 <p className="text-xs text-slate-500 mt-0.5">ক্যাশ অন ডেলিভারি বনাম পরিশোধিত অর্ডার</p>
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4 mt-4">
-              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/70 space-y-1">
+              <div className="p-4 bg-[#F8FAF9] rounded-[10px] border border-slate-200/70 space-y-1">
                 <span className="text-xs font-semibold text-slate-700 block">ক্যাশ অন ডেলিভারি (COD)</span>
                 <span className="text-xl font-bold text-slate-900 font-display tabular-nums block">
                   {paymentSplit.codCount} টি
                 </span>
-                <span className="text-[11px] text-slate-500 block font-mono">
+                <span className="text-[11px] text-slate-500 block font-mono tabular-nums">
                   ৳{paymentSplit.codRevenue.toLocaleString()} ({paymentSplit.codPercentage}%)
                 </span>
               </div>
 
-              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/70 space-y-1">
+              <div className="p-4 bg-[#F8FAF9] rounded-[10px] border border-slate-200/70 space-y-1">
                 <span className="text-xs font-semibold text-slate-700 block">অগ্রিম পরিশোধিত (Paid)</span>
-                <span className="text-xl font-bold text-emerald-600 font-display tabular-nums block">
+                <span className="text-xl font-bold text-[#16A34A] font-display tabular-nums block">
                   {paymentSplit.paidCount} টি
                 </span>
-                <span className="text-[11px] text-slate-500 block font-mono">
+                <span className="text-[11px] text-slate-500 block font-mono tabular-nums">
                   ৳{paymentSplit.paidRevenue.toLocaleString()} ({paymentSplit.paidPercentage}%)
                 </span>
               </div>
             </div>
           </div>
-
         </div>
-
       </div>
 
       {/* Top 10 Spending Customers Leaderboard */}
-      <div className="bg-white border border-slate-200/90 rounded-2xl overflow-hidden shadow-xs">
-        <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between">
+      <div className="bg-white border border-slate-200/80 rounded-[12px] overflow-hidden shadow-xs">
+        <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between bg-[#F8FAF9]">
           <div className="flex items-center gap-2.5">
-            <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
+            <div className="p-2 bg-[#ECFDF3] text-[#16A34A] rounded-[8px] border border-emerald-200/70">
               <Users className="w-4 h-4" />
             </div>
             <div>
               <h3 className="text-sm font-bold text-slate-900 font-display">
-                টপ স্পেন্ডিং গ্রাহক তালিকা (High-Value Customers)
+                টপ স্পেন্ডিং গ্রাহক তালিকা
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">সর্বোচ্চ ক্রয়কারী বিশ্বস্ত গ্রাহকদের তালিকা</p>
             </div>
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead>
-              <tr className="bg-slate-50/80 border-b border-slate-200/80 text-slate-600 font-semibold">
-                <th className="py-3 px-4">র‌্যাংক</th>
-                <th className="py-3 px-4">গ্রাহকের নাম ও ফোন</th>
-                <th className="py-3 px-4">ডেলিভারি ঠিকানা ও এলাকা</th>
-                <th className="py-3 px-4 text-center">মোট অর্ডার</th>
-                <th className="py-3 px-4 text-right">লাইফটাইম ব্যয়</th>
-                <th className="py-3 px-4 text-right">গড় ব্যয়</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {topCustomers.map((cust, idx) => {
-                const avg = Math.round(cust.totalSpent / cust.orderCount);
-                return (
-                  <tr key={cust.phone} className="hover:bg-slate-50/75 transition-colors">
-                    <td className="py-3.5 px-4 font-mono font-bold text-slate-400">
-                      #{idx + 1}
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <span className="font-semibold text-slate-900 block truncate max-w-[150px]">
-                        {cust.name}
-                      </span>
-                      <span className="text-[11px] text-slate-400 font-mono block">
-                        {cust.phone}
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-4 max-w-xs text-slate-600">
-                      <span className="block truncate">{cust.address}</span>
-                      <span className="text-[10px] text-slate-400 font-medium">
-                        {cust.area === 'inside_dhaka' ? 'ঢাকার ভেতরে' : 'ঢাকার বাইরে'}
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-4 text-center">
-                      <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-slate-100 text-slate-800">
-                        {cust.orderCount} টি
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-4 text-right font-bold text-slate-900 font-mono tabular-nums text-xs sm:text-sm">
-                      ৳{cust.totalSpent.toLocaleString()}
-                    </td>
-                    <td className="py-3.5 px-4 text-right font-mono tabular-nums text-slate-600">
-                      ৳{avg.toLocaleString()}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        {topCustomers.length === 0 ? (
+          <div className="py-12 text-center px-4">
+            <Users className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+            <p className="text-xs font-medium text-slate-600">কোনো অর্ডার ডেটা পাওয়া যায়নি</p>
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              অর্ডার সম্পন্ন হলে শীর্ষ ক্রেতাদের তালিকা এখানে প্রদর্শিত হবে।
+            </p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-[#F8FAF9] border-b border-slate-200/80 text-slate-600 font-semibold">
+                  <th className="py-3 px-4">র‌্যাংক</th>
+                  <th className="py-3 px-4">গ্রাহকের নাম ও ফোন</th>
+                  <th className="py-3 px-4">ডেলিভারি ঠিকানা ও এলাকা</th>
+                  <th className="py-3 px-4 text-center">মোট অর্ডার</th>
+                  <th className="py-3 px-4 text-right">লাইফটাইম ব্যয়</th>
+                  <th className="py-3 px-4 text-right">গড় ব্যয়</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {topCustomers.map((cust, idx) => {
+                  const avg = Math.round(cust.totalSpent / cust.orderCount);
+                  return (
+                    <tr key={cust.phone} className="hover:bg-[#F8FAF9] transition-colors">
+                      <td className="py-3.5 px-4 font-mono font-bold text-slate-400 tabular-nums">
+                        #{idx + 1}
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <span className="font-semibold text-slate-900 block truncate max-w-[160px]">
+                          {cust.name}
+                        </span>
+                        <span className="text-[11px] text-slate-400 font-mono block">
+                          {cust.phone}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4 max-w-xs text-slate-600">
+                        <span className="block truncate">{cust.address}</span>
+                        <span className="text-[10px] text-slate-400 font-medium">
+                          {cust.area === 'inside_dhaka' ? 'ঢাকার ভেতরে' : 'ঢাকার বাইরে'}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4 text-center">
+                        <span className="inline-block px-2 py-0.5 rounded-[6px] text-xs font-mono font-bold bg-[#ECFDF3] text-[#15803D] border border-emerald-200/80 tabular-nums">
+                          {cust.orderCount} টি
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4 text-right font-bold text-slate-900 font-mono tabular-nums text-xs sm:text-sm">
+                        ৳{cust.totalSpent.toLocaleString()}
+                      </td>
+                      <td className="py-3.5 px-4 text-right font-mono tabular-nums text-slate-600">
+                        ৳{avg.toLocaleString()}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
-
     </div>
   );
 };

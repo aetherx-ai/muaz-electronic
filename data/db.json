@@ -102,7 +102,8 @@
       "features": [
         "সেমিকন্ডাক্টর ইনস্ট্যান্ট কুলিং অ্যালয় প্লেট",
         "নীরব কিন্তু শক্তিশালী টার্বো ফ্যান মোটর"
-      ]
+      ],
+      "updatedAt": "2026-11-13T12:02:20.655Z"
     },
     {
       "id": "hollyland-lark-m2",
@@ -204,5 +205,6 @@
     "facebookUrl": "https://www.facebook.com/share/1KwJp3ZvBy/",
     "deliveryFeeInsideDhaka": 70,
     "deliveryFeeOutsideDhaka": 130
-  }
+  },
+  "orders": []
 }

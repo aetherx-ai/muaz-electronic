@@ -4,12 +4,9 @@ import {
   CheckCircle,
   Database,
   Copy,
-  ExternalLink,
-  ShieldAlert,
   Phone,
   Truck,
   Globe,
-  Settings,
   Check,
 } from 'lucide-react';
 import { StoreSettings } from '../../types';
@@ -94,10 +91,9 @@ CREATE POLICY "Admins manage products" ON public.products FOR ALL TO authenticat
 
   return (
     <div className="space-y-6 max-w-4xl animate-in fade-in duration-150">
-      
       {/* Title */}
       <div>
-        <h2 className="text-xl sm:text-2xl font-bold text-slate-900 font-display">
+        <h2 className="text-xl sm:text-2xl font-bold text-slate-900 font-display tracking-tight">
           স্টোর ও ডাটাবেজ সেটিংস
         </h2>
         <p className="text-xs text-slate-500 mt-0.5">
@@ -106,27 +102,29 @@ CREATE POLICY "Admins manage products" ON public.products FOR ALL TO authenticat
       </div>
 
       {feedback && (
-        <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-2 text-xs font-semibold text-emerald-800 shadow-2xs">
-          <CheckCircle className="w-4 h-4 shrink-0 text-emerald-600" />
+        <div className="p-3.5 bg-[#ECFDF3] border border-emerald-200 rounded-[12px] flex items-center gap-2 text-xs font-semibold text-[#15803D] shadow-2xs">
+          <CheckCircle className="w-4 h-4 shrink-0 text-[#16A34A]" />
           <span>{feedback}</span>
         </div>
       )}
 
       {/* Supabase Status Card */}
-      <div className="bg-white border border-slate-200/80 rounded-2xl p-5 sm:p-6 shadow-xs relative overflow-hidden">
+      <div className="bg-white border border-slate-200/80 rounded-[12px] p-5 sm:p-6 shadow-xs relative overflow-hidden">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-blue-50 border border-blue-100 text-blue-600 rounded-xl">
+            <div className="p-2.5 bg-[#ECFDF3] border border-emerald-200/70 text-[#16A34A] rounded-[10px]">
               <Database className="w-5 h-5" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm font-bold text-slate-900 font-display">Supabase ডাটাবেজ ও ক্লাউড স্টোরেজ</h3>
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-sm font-bold text-slate-900 font-display">
+                  Supabase ডাটাবেজ ও ক্লাউড স্টোরেজ
+                </h3>
                 <span
-                  className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${
+                  className={`px-2 py-0.5 rounded-[6px] text-[10px] font-bold uppercase tracking-wider border ${
                     isSupabaseConnected
-                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                      : 'bg-blue-50 text-blue-700 border border-blue-200'
+                      ? 'bg-[#ECFDF3] text-[#15803D] border-emerald-200'
+                      : 'bg-slate-100 text-slate-700 border-slate-200'
                   }`}
                 >
                   {isSupabaseConnected ? 'Live Cloud Connected' : 'Persistent Storage Active'}
@@ -143,11 +141,11 @@ CREATE POLICY "Admins manage products" ON public.products FOR ALL TO authenticat
           <button
             type="button"
             onClick={copySqlToClipboard}
-            className="flex items-center gap-2 px-3.5 py-2 text-xs font-semibold bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl transition-colors self-start sm:self-auto"
+            className="flex items-center gap-2 px-3.5 py-2 text-xs font-semibold bg-[#F8FAF9] hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-[10px] transition-colors self-start sm:self-auto whitespace-nowrap"
           >
             {copiedSql ? (
               <>
-                <Check className="w-3.5 h-3.5 text-emerald-600" />
+                <Check className="w-3.5 h-3.5 text-[#16A34A]" />
                 <span>SQL কপি হয়েছে!</span>
               </>
             ) : (
@@ -160,30 +158,48 @@ CREATE POLICY "Admins manage products" ON public.products FOR ALL TO authenticat
         </div>
 
         <div className="mt-4 text-xs text-slate-600 space-y-2">
-          <p className="font-semibold text-slate-800">
-            ক্লাউড প্রজেক্ট কানেক্ট করার সহজ ধাপ:
-          </p>
+          <p className="font-semibold text-slate-800">ক্লাউড প্রজেক্ট কানেক্ট করার সহজ ধাপ:</p>
           <ol className="list-decimal list-inside space-y-1 pl-1 text-[11px] text-slate-500">
             <li>
-              Supabase ড্যাশবোর্ডে গিয়ে একটি প্রজেক্ট খুলুন এবং SQL Editor-এ <code className="bg-slate-100 px-1 py-0.5 rounded font-mono text-slate-800">supabase/schema.sql</code> রান করুন।
+              Supabase ড্যাশবোর্ডে গিয়ে একটি প্রজেক্ট খুলুন এবং SQL Editor-এ{' '}
+              <code className="bg-slate-100 px-1 py-0.5 rounded font-mono text-slate-800">
+                supabase/schema.sql
+              </code>{' '}
+              রান করুন।
             </li>
             <li>
-              Storage-এ গিয়ে <code className="bg-slate-100 px-1 py-0.5 rounded font-mono text-slate-800">product-images</code> নামে একটি পাবলিক বাকেট তৈরি করুন।
+              Storage-এ গিয়ে{' '}
+              <code className="bg-slate-100 px-1 py-0.5 rounded font-mono text-slate-800">
+                product-images
+              </code>{' '}
+              নামে একটি পাবলিক বাকেট তৈরি করুন।
             </li>
             <li>
-              আপনার প্রজেক্টের <code className="bg-slate-100 px-1 py-0.5 rounded font-mono text-slate-800">VITE_SUPABASE_URL</code> এবং <code className="bg-slate-100 px-1 py-0.5 rounded font-mono text-slate-800">VITE_SUPABASE_ANON_KEY</code> টি <code className="bg-slate-100 px-1 py-0.5 rounded font-mono text-slate-800">.env</code> ফাইলে যুক্ত করুন।
+              আপনার প্রজেক্টের{' '}
+              <code className="bg-slate-100 px-1 py-0.5 rounded font-mono text-slate-800">
+                VITE_SUPABASE_URL
+              </code>{' '}
+              এবং{' '}
+              <code className="bg-slate-100 px-1 py-0.5 rounded font-mono text-slate-800">
+                VITE_SUPABASE_ANON_KEY
+              </code>{' '}
+              টি{' '}
+              <code className="bg-slate-100 px-1 py-0.5 rounded font-mono text-slate-800">.env</code>{' '}
+              ফাইলে যুক্ত করুন।
             </li>
           </ol>
         </div>
       </div>
 
       {/* Main Settings Form */}
-      <form onSubmit={handleSubmit} className="bg-white border border-slate-200/80 rounded-2xl p-6 sm:p-7 space-y-6 shadow-xs">
-        
+      <form
+        onSubmit={handleSubmit}
+        className="bg-white border border-slate-200/80 rounded-[12px] p-6 sm:p-7 space-y-6 shadow-xs"
+      >
         {/* Brand Information */}
         <div className="space-y-4">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900 border-b border-slate-100 pb-2 flex items-center gap-2">
-            <Globe className="w-4 h-4 text-blue-600" />
+          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900 border-b border-slate-100 pb-2.5 flex items-center gap-2">
+            <Globe className="w-4 h-4 text-[#16A34A]" />
             <span>ব্র্যান্ড ও স্টোর তথ্য</span>
           </h3>
 
@@ -196,7 +212,7 @@ CREATE POLICY "Admins manage products" ON public.products FOR ALL TO authenticat
                 type="text"
                 value={storeName}
                 onChange={(e) => setStoreName(e.target.value)}
-                className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:border-blue-500 focus:bg-white transition-colors"
+                className="w-full px-3.5 py-2 text-xs bg-[#F8FAF9] border border-slate-200 rounded-[10px] text-slate-900 focus:outline-none focus:border-[#16A34A] focus:ring-2 focus:ring-[#16A34A]/15 focus:bg-white transition-colors"
               />
             </div>
 
@@ -208,7 +224,7 @@ CREATE POLICY "Admins manage products" ON public.products FOR ALL TO authenticat
                 type="text"
                 value={tagline}
                 onChange={(e) => setTagline(e.target.value)}
-                className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:border-blue-500 focus:bg-white transition-colors"
+                className="w-full px-3.5 py-2 text-xs bg-[#F8FAF9] border border-slate-200 rounded-[10px] text-slate-900 focus:outline-none focus:border-[#16A34A] focus:ring-2 focus:ring-[#16A34A]/15 focus:bg-white transition-colors"
               />
             </div>
           </div>
@@ -216,8 +232,8 @@ CREATE POLICY "Admins manage products" ON public.products FOR ALL TO authenticat
 
         {/* WhatsApp & Social Contacts */}
         <div className="space-y-4">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900 border-b border-slate-100 pb-2 flex items-center gap-2">
-            <Phone className="w-4 h-4 text-blue-600" />
+          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900 border-b border-slate-100 pb-2.5 flex items-center gap-2">
+            <Phone className="w-4 h-4 text-[#16A34A]" />
             <span>অফিসিয়াল যোগাযোগ ও সোশ্যাল</span>
           </h3>
 
@@ -231,7 +247,7 @@ CREATE POLICY "Admins manage products" ON public.products FOR ALL TO authenticat
                 value={whatsappNumber}
                 onChange={(e) => setWhatsappNumber(e.target.value)}
                 placeholder="01822486585"
-                className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-mono focus:outline-none focus:border-blue-500 focus:bg-white transition-colors"
+                className="w-full px-3.5 py-2 text-xs bg-[#F8FAF9] border border-slate-200 rounded-[10px] text-slate-900 font-mono focus:outline-none focus:border-[#16A34A] focus:ring-2 focus:ring-[#16A34A]/15 focus:bg-white transition-colors"
               />
             </div>
 
@@ -244,7 +260,7 @@ CREATE POLICY "Admins manage products" ON public.products FOR ALL TO authenticat
                 value={whatsappIntl}
                 onChange={(e) => setWhatsappIntl(e.target.value)}
                 placeholder="8801822486585"
-                className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-mono focus:outline-none focus:border-blue-500 focus:bg-white transition-colors"
+                className="w-full px-3.5 py-2 text-xs bg-[#F8FAF9] border border-slate-200 rounded-[10px] text-slate-900 font-mono focus:outline-none focus:border-[#16A34A] focus:ring-2 focus:ring-[#16A34A]/15 focus:bg-white transition-colors"
               />
             </div>
           </div>
@@ -257,15 +273,15 @@ CREATE POLICY "Admins manage products" ON public.products FOR ALL TO authenticat
               type="url"
               value={facebookUrl}
               onChange={(e) => setFacebookUrl(e.target.value)}
-              className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:border-blue-500 focus:bg-white transition-colors"
+              className="w-full px-3.5 py-2 text-xs bg-[#F8FAF9] border border-slate-200 rounded-[10px] text-slate-900 focus:outline-none focus:border-[#16A34A] focus:ring-2 focus:ring-[#16A34A]/15 focus:bg-white transition-colors"
             />
           </div>
         </div>
 
         {/* Delivery Rates */}
         <div className="space-y-4">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900 border-b border-slate-100 pb-2 flex items-center gap-2">
-            <Truck className="w-4 h-4 text-blue-600" />
+          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900 border-b border-slate-100 pb-2.5 flex items-center gap-2">
+            <Truck className="w-4 h-4 text-[#16A34A]" />
             <span>ডেলিভারি চার্জ নির্ধারণ (BDT ৳)</span>
           </h3>
 
@@ -279,7 +295,7 @@ CREATE POLICY "Admins manage products" ON public.products FOR ALL TO authenticat
                 min="0"
                 value={deliveryFeeInsideDhaka}
                 onChange={(e) => setDeliveryFeeInsideDhaka(Number(e.target.value))}
-                className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-mono focus:outline-none focus:border-blue-500 focus:bg-white transition-colors tabular-nums"
+                className="w-full px-3.5 py-2 text-xs bg-[#F8FAF9] border border-slate-200 rounded-[10px] text-slate-900 font-mono focus:outline-none focus:border-[#16A34A] focus:ring-2 focus:ring-[#16A34A]/15 focus:bg-white transition-colors tabular-nums"
               />
             </div>
 
@@ -292,7 +308,7 @@ CREATE POLICY "Admins manage products" ON public.products FOR ALL TO authenticat
                 min="0"
                 value={deliveryFeeOutsideDhaka}
                 onChange={(e) => setDeliveryFeeOutsideDhaka(Number(e.target.value))}
-                className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-mono focus:outline-none focus:border-blue-500 focus:bg-white transition-colors tabular-nums"
+                className="w-full px-3.5 py-2 text-xs bg-[#F8FAF9] border border-slate-200 rounded-[10px] text-slate-900 font-mono focus:outline-none focus:border-[#16A34A] focus:ring-2 focus:ring-[#16A34A]/15 focus:bg-white transition-colors tabular-nums"
               />
             </div>
           </div>
@@ -303,15 +319,13 @@ CREATE POLICY "Admins manage products" ON public.products FOR ALL TO authenticat
           <button
             type="submit"
             disabled={isSaving}
-            className="flex items-center gap-2 px-6 py-2.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 active:scale-[0.98] rounded-xl transition-all shadow-xs disabled:opacity-50"
+            className="flex items-center gap-2 px-6 py-2.5 text-xs font-semibold text-white bg-[#16A34A] hover:bg-[#15803D] rounded-[10px] transition-colors shadow-xs disabled:opacity-50"
           >
             <Save className="w-4 h-4" />
             <span>{isSaving ? 'সংরক্ষিত হচ্ছে...' : 'সেটিংস সংরক্ষণ করুন'}</span>
           </button>
         </div>
-
       </form>
-
     </div>
   );
 };

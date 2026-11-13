@@ -7,18 +7,12 @@ import {
   RefreshCw,
   Store,
   ChevronRight,
-  User,
   Settings,
   LogOut,
   ExternalLink,
   ShieldCheck,
-  Package,
-  Layers,
-  ShoppingBag,
   Search,
   X,
-  Boxes,
-  Users,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { AdminTab } from './AdminSidebar';
@@ -40,46 +34,50 @@ interface AdminHeaderProps {
   onSelectOrder?: (order: CustomerOrder) => void;
 }
 
-const TAB_TITLES: Record<AdminTab, { title: string; subtitle: string }> = {
+const TAB_TITLES: Record<AdminTab, { breadcrumb: string; title: string }> = {
   overview: {
-    title: 'বিজনেস ড্যাশবোর্ড ওভারভিউ',
-    subtitle: 'রিয়েল-টাইম বিক্রয় অ্যানালিটিক্স, অর্ডার ট্র্যাকিং ও সামগ্রিক প্রবৃদ্ধি',
+    breadcrumb: 'Overview',
+    title: 'ড্যাশবোর্ড ওভারভিউ',
   },
   products: {
-    title: 'প্রোডাক্ট ক্যাটালগ ম্যানেজমেন্ট',
-    subtitle: 'পণ্যের স্টক, মূল্য, স্পেসিফিকেশন ও স্ট্যাটাস নিয়ন্ত্রণ',
+    breadcrumb: 'Products',
+    title: 'প্রোডাক্ট ক্যাটালগ',
   },
   categories: {
-    title: 'ক্যাটাগরি আর্কিটেকচার',
-    subtitle: 'ডাইনামিক ক্যাটাগরি তৈরি, ড্র্যাগ রি-অর্ডারিং ও নিরাপদ ডাটা মাইগ্রেশন',
+    breadcrumb: 'Categories',
+    title: 'ক্যাটাগরি ম্যানেজমেন্ট',
   },
   orders: {
-    title: 'অর্ডার এক্সিকিউশন ও ট্র্যাকিং',
-    subtitle: 'গ্রাহকদের ক্রয় চালান, ডেলিভারি স্ট্যাটাস ও পেমেন্ট আপডেট',
+    breadcrumb: 'Orders',
+    title: 'অর্ডার ম্যানেজমেন্ট',
   },
   customers: {
-    title: 'গ্রাহক ডিরেক্টরি ও হিস্ট্রি',
-    subtitle: 'গ্রাহকদের যোগাযোগের তথ্য, ক্রয় প্রবণতা ও ভ্যালু অ্যানালাইসিস',
+    breadcrumb: 'Customers',
+    title: 'গ্রাহক ডিরেক্টরি',
   },
   inventory: {
-    title: 'ইনভেন্টরি ও রিস্টক মনিটর',
-    subtitle: 'লো-স্টক সতর্কতা, দ্রুত গুদাম স্টক আপডেট ও ক্যাপিটাল পরিসংখ্যান',
+    breadcrumb: 'Inventory',
+    title: 'ইনভেন্টরি ও স্টক',
+  },
+  'clothing-sizes': {
+    breadcrumb: 'Clothing Sizes',
+    title: 'ক্লোথিং সাইজ ইনভেন্টরি (S–XXL)',
   },
   discounts: {
-    title: 'ডিসকাউন্ট ও কুপন ক্যাম্পেইন',
-    subtitle: 'প্রমোশনাল কুপন কোড, ডিসকাউন্ট অফার ও ভাউচার পরিচালনা',
+    breadcrumb: 'Discounts',
+    title: 'ডিসকাউন্ট ও কুপন',
   },
   reviews: {
-    title: 'কাস্টমার রিভিউ ও রেটিং',
-    subtitle: 'গ্রাহকদের মতামত, ৫-স্টার রেটিং ও রিভিউ অনুমোদন',
+    breadcrumb: 'Reviews',
+    title: 'কাস্টমার রিভিউ',
   },
   analytics: {
-    title: 'বিজনেস রিপোর্ট ও অ্যানালিটিক্স',
-    subtitle: 'রেভিনিউ প্রবৃদ্ধি, কাস্টমার সেগমেন্টেশন ও বিক্রয় পারফরম্যান্স',
+    breadcrumb: 'Analytics',
+    title: 'সেলস রিপোর্ট ও অ্যানালিটিক্স',
   },
   settings: {
-    title: 'স্টোর ও সিস্টেম কনফিগারেশন',
-    subtitle: 'যোগাযোগের চ্যানেল, কুরিয়ার চার্জ ও ক্লাউড ডাটাবেজ সমন্বয়',
+    breadcrumb: 'Settings',
+    title: 'স্টোর ও সিস্টেম সেটিংস',
   },
 };
 
@@ -105,7 +103,6 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
   const profileRef = useRef<HTMLDivElement>(null);
   const searchContainerRef = useRef<HTMLDivElement>(null);
 
-  // Close dropdown on click outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (profileRef.current && !profileRef.current.contains(event.target as Node)) {
@@ -119,12 +116,11 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Global search keyboard shortcut ('/' or 'Cmd+K')
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.key === '/' || (e.key === 'k' && (e.metaKey || e.ctrlKey))) && !searchFocused) {
         const activeTag = document.activeElement?.tagName.toLowerCase();
-        if (activeTag !== 'input' && activeTag !== 'textarea') {
+        if (activeTag !== 'input' && activeTag !== 'textarea' && activeTag !== 'select') {
           e.preventDefault();
           const searchInput = document.getElementById('admin-global-search') as HTMLInputElement | null;
           searchInput?.focus();
@@ -136,13 +132,17 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [searchFocused]);
 
-  // Search Results
   const searchResults = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return { products: [], orders: [] };
 
     const matchedProducts = products
-      .filter((p) => p.name.toLowerCase().includes(q) || p.category.toLowerCase().includes(q))
+      .filter(
+        (p) =>
+          p.name.toLowerCase().includes(q) ||
+          (p.bengaliName && p.bengaliName.toLowerCase().includes(q)) ||
+          p.category.toLowerCase().includes(q)
+      )
       .slice(0, 4);
 
     const matchedOrders = orders
@@ -164,23 +164,22 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
   const tabInfo = TAB_TITLES[currentTab] || TAB_TITLES.overview;
 
   return (
-    <header className="sticky top-0 z-30 h-16 bg-white/95 backdrop-blur-md border-b border-slate-200/80 px-4 sm:px-6 lg:px-8 flex items-center justify-between shadow-xs">
-      
-      {/* Left: Mobile trigger, Desktop collapse toggle & Page Title */}
-      <div className="flex items-center gap-3.5 min-w-0">
-        {/* Mobile menu button */}
+    <header className="sticky top-0 z-30 h-16 bg-white/95 backdrop-blur-md border-b border-slate-200/80 px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-3">
+      {/* Left: Mobile drawer, Sidebar collapse & Breadcrumb/Title */}
+      <div className="flex items-center gap-3 min-w-0">
         <button
+          type="button"
           onClick={openMobileSidebar}
-          className="lg:hidden p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
+          className="lg:hidden p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-[10px] transition-colors shrink-0"
           aria-label="মেনু খুলুন"
         >
           <Menu className="w-5 h-5 stroke-[1.8]" />
         </button>
 
-        {/* Desktop collapse/expand button */}
         <button
+          type="button"
           onClick={toggleSidebarCollapse}
-          className="hidden lg:flex p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
+          className="hidden lg:flex p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-[8px] transition-colors shrink-0"
           title={isSidebarCollapsed ? 'সাইডবার প্রসারিত করুন' : 'সাইডবার সংকুচিত করুন'}
           aria-label="সাইডবার টগল"
         >
@@ -191,15 +190,14 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
           )}
         </button>
 
-        <div className="h-4 w-px bg-slate-200 hidden lg:block" />
+        <div className="h-4 w-px bg-slate-200 hidden lg:block shrink-0" />
 
-        {/* Breadcrumb & Tab Title */}
         <div className="min-w-0">
-          <div className="flex items-center gap-1.5 text-[11px] text-slate-500 font-medium">
-            <span className="font-semibold text-slate-800">Muaz Admin</span>
+          <div className="flex items-center gap-1 text-[11px] text-slate-500 font-medium">
+            <span className="font-semibold text-slate-700 truncate">MUAZ ELECTRONIC</span>
             <ChevronRight className="w-3 h-3 text-slate-400 shrink-0" />
-            <span className="text-blue-600 font-semibold truncate capitalize">
-              {currentTab}
+            <span className="text-[#16A34A] font-semibold truncate">
+              {tabInfo.breadcrumb}
             </span>
           </div>
           <h1 className="text-sm sm:text-base font-bold text-slate-900 truncate font-display tracking-tight leading-tight">
@@ -208,8 +206,11 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
         </div>
       </div>
 
-      {/* Middle: Integrated Quick Search Bar */}
-      <div className="hidden md:flex items-center flex-1 max-w-xs lg:max-w-md mx-4 relative" ref={searchContainerRef}>
+      {/* Center: Quick Global Search */}
+      <div
+        className="hidden md:flex items-center flex-1 max-w-xs lg:max-w-md mx-2 relative"
+        ref={searchContainerRef}
+      >
         <div className="relative w-full">
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
             <Search className="w-3.5 h-3.5" />
@@ -220,11 +221,12 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onFocus={() => setSearchFocused(true)}
-            placeholder="পণ্য বা অর্ডার সার্চ করুন (নাম, ফোন, #আইডি)..."
-            className="w-full pl-8 pr-14 py-1.5 text-xs bg-slate-50 hover:bg-slate-100/70 focus:bg-white text-slate-900 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all outline-none font-sans"
+            placeholder="পণ্য বা অর্ডার খুঁজুন (নাম, ফোন, #আইডি)..."
+            className="w-full pl-8 pr-12 py-1.5 text-xs bg-[#F8FAF9] hover:bg-slate-100/70 focus:bg-white text-slate-900 rounded-[10px] border border-slate-200 focus:border-[#16A34A] focus:ring-2 focus:ring-[#16A34A]/15 transition-all outline-none"
           />
           {searchQuery ? (
             <button
+              type="button"
               onClick={() => setSearchQuery('')}
               className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600"
             >
@@ -232,7 +234,7 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
             </button>
           ) : (
             <div className="absolute inset-y-0 right-0 pr-2.5 flex items-center pointer-events-none">
-              <kbd className="px-1.5 py-0.5 text-[10px] font-mono text-slate-400 bg-slate-200/60 rounded border border-slate-300/60">
+              <kbd className="px-1.5 py-0.5 text-[10px] font-mono text-slate-400 bg-white rounded-[6px] border border-slate-200">
                 /
               </kbd>
             </div>
@@ -241,37 +243,37 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
 
         {/* Search Results Dropdown */}
         {searchFocused && searchQuery.trim() && (
-          <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-100">
+          <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-[12px] shadow-xl overflow-hidden z-50 animate-in fade-in duration-100">
             {hasSearchResults ? (
               <div className="max-h-80 overflow-y-auto divide-y divide-slate-100 p-2">
                 {searchResults.products.length > 0 && (
                   <div className="pb-2">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 py-1 block">
-                      প্রোডাক্টসমূহ ({searchResults.products.length})
+                    <span className="text-[11px] font-semibold text-slate-400 px-2 py-1 block">
+                      প্রোডাক্ট ({searchResults.products.length})
                     </span>
                     {searchResults.products.map((p) => (
                       <button
                         key={p.id}
+                        type="button"
                         onClick={() => {
                           setSearchFocused(false);
                           setSearchQuery('');
-                          if (onSelectProduct) {
-                            onSelectProduct(p);
-                          } else {
-                            setCurrentTab('products');
-                          }
+                          if (onSelectProduct) onSelectProduct(p);
+                          else setCurrentTab('products');
                         }}
-                        className="w-full text-left p-2 rounded-xl hover:bg-slate-50 flex items-center justify-between text-xs transition-colors"
+                        className="w-full text-left p-2 rounded-[10px] hover:bg-[#F8FAF9] flex items-center justify-between text-xs transition-colors"
                       >
                         <div className="flex items-center gap-2.5 min-w-0">
                           <img
                             src={p.image}
                             alt={p.name}
-                            className="w-8 h-8 rounded-lg object-cover bg-slate-100 border border-slate-200 shrink-0"
+                            className="w-8 h-8 rounded-[8px] object-cover bg-slate-100 border border-slate-200 shrink-0"
                           />
                           <div className="min-w-0">
                             <span className="font-semibold text-slate-900 block truncate">{p.name}</span>
-                            <span className="text-[11px] text-slate-500 block">{p.category} • স্টক: {p.stock}</span>
+                            <span className="text-[11px] text-slate-500 block">
+                              {p.category} · স্টক: {p.stock}
+                            </span>
                           </div>
                         </div>
                         <span className="font-bold text-slate-900 font-mono tabular-nums shrink-0 ml-2">
@@ -284,34 +286,34 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
 
                 {searchResults.orders.length > 0 && (
                   <div className="pt-2">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 py-1 block">
-                      অর্ডারসমূহ ({searchResults.orders.length})
+                    <span className="text-[11px] font-semibold text-slate-400 px-2 py-1 block">
+                      অর্ডার ({searchResults.orders.length})
                     </span>
                     {searchResults.orders.map((o) => (
                       <button
                         key={o.id || o.orderNumber}
+                        type="button"
                         onClick={() => {
                           setSearchFocused(false);
                           setSearchQuery('');
-                          if (onSelectOrder) {
-                            onSelectOrder(o);
-                          } else {
-                            setCurrentTab('orders');
-                          }
+                          if (onSelectOrder) onSelectOrder(o);
+                          else setCurrentTab('orders');
                         }}
-                        className="w-full text-left p-2 rounded-xl hover:bg-slate-50 flex items-center justify-between text-xs transition-colors"
+                        className="w-full text-left p-2 rounded-[10px] hover:bg-[#F8FAF9] flex items-center justify-between text-xs transition-colors"
                       >
                         <div className="min-w-0">
-                          <span className="font-mono font-bold text-blue-600 block">#{o.orderNumber}</span>
+                          <span className="font-mono font-bold text-[#15803D] block">
+                            #{o.orderNumber}
+                          </span>
                           <span className="text-slate-900 font-medium block truncate">
-                            {o.customerName} • {o.phoneNumber}
+                            {o.customerName} · {o.phoneNumber}
                           </span>
                         </div>
                         <div className="text-right shrink-0 ml-2">
                           <span className="font-bold text-slate-900 font-mono tabular-nums block">
                             ৳{o.total.toLocaleString()}
                           </span>
-                          <span className="text-[10px] capitalize text-slate-500 font-medium block">
+                          <span className="text-[11px] capitalize text-slate-500 font-medium block">
                             {o.status || 'pending'}
                           </span>
                         </div>
@@ -329,93 +331,96 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
         )}
       </div>
 
-      {/* Right: Actions, Refresh & Profile Dropdown */}
-      <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
-        {/* Refresh button */}
+      {/* Right: Sync, Add Product, Storefront, Profile */}
+      <div className="flex items-center gap-2 shrink-0">
         <button
+          type="button"
           onClick={onRefresh}
           disabled={isLoading}
-          className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50/70 rounded-xl transition-colors border border-transparent hover:border-blue-100"
-          title="ডাটাবেজ রিফ্রেশ করুন"
+          className="p-2 text-slate-500 hover:text-[#16A34A] hover:bg-[#ECFDF3] rounded-[10px] transition-colors border border-transparent hover:border-emerald-200/80 shrink-0"
+          title="ডাটাবেজ সিঙ্ক করুন"
           aria-label="তথ্য রিফ্রেশ করুন"
         >
-          <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin text-blue-600' : ''}`} />
+          <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin text-[#16A34A]' : ''}`} />
         </button>
 
-        {/* Quick Add Product */}
         <button
+          type="button"
           onClick={onAddNewProduct}
-          className="inline-flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 sm:py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 active:scale-[0.98] rounded-xl transition-all shadow-xs"
+          className="inline-flex items-center gap-1.5 px-3 sm:px-3.5 py-2 text-xs font-semibold text-white bg-[#16A34A] hover:bg-[#15803D] rounded-[10px] transition-colors shadow-xs whitespace-nowrap shrink-0"
         >
           <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
           <span className="hidden sm:inline">নতুন প্রোডাক্ট</span>
-          <span className="sm:hidden">প্রোডাক্ট</span>
+          <span className="sm:hidden">যোগ করুন</span>
         </button>
 
-        {/* Go to public store */}
         <button
+          type="button"
           onClick={onBackToStore}
-          className="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 border border-slate-200/80 rounded-xl transition-colors"
+          className="hidden xl:inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-700 hover:text-[#15803D] bg-[#F8FAF9] hover:bg-[#ECFDF3] border border-slate-200/90 rounded-[10px] transition-colors whitespace-nowrap shrink-0"
           title="লাইভ স্টোর দেখুন"
         >
           <Store className="w-3.5 h-3.5 text-slate-500" />
           <span>স্টোরফ্রন্ট</span>
         </button>
 
-        <div className="h-4 w-px bg-slate-200 mx-1 hidden sm:block" />
+        <div className="h-4 w-px bg-slate-200 mx-0.5 hidden sm:block shrink-0" />
 
         {/* Profile Dropdown */}
         <div className="relative" ref={profileRef}>
           <button
+            type="button"
             onClick={() => setProfileOpen(!profileOpen)}
-            className="flex items-center gap-2 p-1 sm:p-1.5 rounded-xl hover:bg-slate-100 border border-transparent hover:border-slate-200/80 transition-colors"
+            className="flex items-center gap-2 p-1 sm:p-1.5 rounded-[10px] hover:bg-slate-100 border border-transparent hover:border-slate-200/80 transition-colors"
             aria-expanded={profileOpen}
             aria-label="অ্যাডমিন প্রোফাইল মেনু"
           >
-            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-slate-900 text-white font-semibold text-xs flex items-center justify-center shrink-0 shadow-2xs font-display">
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-[8px] bg-slate-900 text-white font-semibold text-xs flex items-center justify-center shrink-0 font-display">
               {user?.name ? user.name.charAt(0).toUpperCase() : 'A'}
             </div>
             <div className="hidden lg:block text-left text-xs leading-tight">
               <span className="font-semibold text-slate-900 block truncate max-w-[100px]">
                 {user?.name || 'Admin'}
               </span>
-              <span className="text-[10px] text-slate-400 block">ম্যানেজার</span>
+              <span className="text-[11px] text-slate-500 block">অ্যাডমিন</span>
             </div>
           </button>
 
           {profileOpen && (
-            <div className="absolute right-0 mt-2 w-56 bg-white border border-slate-200 rounded-2xl shadow-xl py-2 z-50 animate-in fade-in zoom-in-95 duration-100">
+            <div className="absolute right-0 mt-2 w-56 bg-white border border-slate-200 rounded-[12px] shadow-xl py-2 z-50 animate-in fade-in duration-100">
               <div className="px-4 py-2.5 border-b border-slate-100">
-                <div className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 mb-0.5">
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                <div className="flex items-center gap-1.5 text-[11px] font-semibold text-[#15803D] mb-0.5">
+                  <ShieldCheck className="w-3.5 h-3.5 text-[#16A34A]" />
                   <span>সুপার অ্যাডমিন</span>
                 </div>
                 <p className="text-xs font-bold text-slate-900 truncate">
                   {user?.name || 'Administrator'}
                 </p>
                 <p className="text-[11px] text-slate-500 truncate">
-                  {user?.email || 'admin@muazelectronic.com'}
+                  {user?.email || 'admin@muazelectronic.online'}
                 </p>
               </div>
 
               <div className="py-1">
                 <button
+                  type="button"
                   onClick={() => {
                     setCurrentTab('settings');
                     setProfileOpen(false);
                   }}
-                  className="w-full text-left px-4 py-2 text-xs text-slate-700 hover:bg-slate-50 flex items-center gap-2.5 font-medium"
+                  className="w-full text-left px-4 py-2 text-xs text-slate-700 hover:bg-[#F8FAF9] flex items-center gap-2.5 font-medium"
                 >
                   <Settings className="w-4 h-4 text-slate-400" />
                   <span>স্টোর ও সিস্টেম সেটিংস</span>
                 </button>
 
                 <button
+                  type="button"
                   onClick={() => {
                     onBackToStore();
                     setProfileOpen(false);
                   }}
-                  className="w-full text-left px-4 py-2 text-xs text-slate-700 hover:bg-slate-50 flex items-center gap-2.5 font-medium"
+                  className="w-full text-left px-4 py-2 text-xs text-slate-700 hover:bg-[#F8FAF9] flex items-center gap-2.5 font-medium"
                 >
                   <ExternalLink className="w-4 h-4 text-slate-400" />
                   <span>পাবলিক স্টোরফ্রন্টে যান</span>
@@ -424,6 +429,7 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
 
               <div className="pt-1 border-t border-slate-100">
                 <button
+                  type="button"
                   onClick={() => {
                     setProfileOpen(false);
                     logout();
@@ -437,9 +443,7 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
             </div>
           )}
         </div>
-
       </div>
     </header>
   );
 };
-

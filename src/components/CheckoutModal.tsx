@@ -3,6 +3,7 @@ import { X, CheckCircle2, MessageCircle, AlertCircle, ShieldCheck, MapPin, Phone
 import { useCart } from '../context/CartContext';
 import { WHATSAPP_INTL, WHATSAPP_NUMBER } from '../data/products';
 import { orderService } from '../lib/supabase';
+import { getEffectiveUnitPrice } from '../lib/sizeInventory';
 
 export const CheckoutModal: React.FC = () => {
   const { isCheckoutOpen, setIsCheckoutOpen, items, subtotal, clearCart } = useCart();
@@ -14,8 +15,10 @@ export const CheckoutModal: React.FC = () => {
   const [notes, setNotes] = useState('');
 
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [orderConfirmed, setOrderConfirmed] = useState(false);
   const [generatedOrderNumber, setGeneratedOrderNumber] = useState('');
+  const [confirmedTotal, setConfirmedTotal] = useState<number>(0);
   const [whatsappUrl, setWhatsappUrl] = useState('');
 
   if (!isCheckoutOpen) return null;
@@ -50,69 +53,94 @@ export const CheckoutModal: React.FC = () => {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmitOrder = (e: React.FormEvent) => {
+  const handleSubmitOrder = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
     if (!validate()) return;
 
+    setIsSubmitting(true);
+    setErrors({});
+
     const cleanPhone = phoneNumber.trim().replace(/[\s-]/g, '');
-    const orderId = `ME-${Date.now().toString().slice(-6)}`;
+    const clientOrderId = `ME-${Date.now().toString().slice(-6)}`;
     const areaName = deliveryArea === 'inside_dhaka' ? 'ঢাকা সিটির ভেতরে (৳৭০)' : 'ঢাকার বাইরে (৳১৩০)';
 
-    let message = `*নতুন অর্ডার - MUAZ ELECTRONIC*\n`;
-    message += `অর্ডার আইডি: #${orderId}\n`;
-    message += `--------------------------------\n`;
-    message += `👤 *গ্রাহকের নাম:* ${customerName.trim()}\n`;
-    message += `📱 *মোবাইল:* ${phoneNumber.trim()}\n`;
-    message += `📍 *ঠিকানা:* ${deliveryAddress.trim()}\n`;
-    message += `🚚 *ডেলিভারি এরিয়া:* ${areaName}\n`;
-    if (notes.trim()) {
-      message += `📝 *বিশেষ নোট:* ${notes.trim()}\n`;
+    try {
+      const result = await orderService.createOrder({
+        orderNumber: clientOrderId,
+        customerName: customerName.trim(),
+        phoneNumber: cleanPhone,
+        deliveryAddress: deliveryAddress.trim(),
+        deliveryArea,
+        notes: notes.trim() || undefined,
+        items: [...items],
+        subtotal,
+        deliveryFee,
+        total: grandTotal,
+        orderDate: new Date().toISOString(),
+        status: 'pending',
+        paymentStatus: 'cod',
+      });
+
+      if (!result.success) {
+        setErrors({
+          general: result.error || 'অর্ডার সম্পন্ন করা যায়নি। অনুগ্রহ করে স্টক যাচাই করে আবার চেষ্টা করুন।',
+        });
+        window.dispatchEvent(new CustomEvent('muaz-products-updated'));
+        setIsSubmitting(false);
+        return;
+      }
+
+      const finalOrderId = result.order?.orderNumber || clientOrderId;
+
+      let message = `*নতুন অর্ডার - MUAZ ELECTRONIC*\n`;
+      message += `অর্ডার আইডি: #${finalOrderId}\n`;
+      message += `--------------------------------\n`;
+      message += `👤 *গ্রাহকের নাম:* ${customerName.trim()}\n`;
+      message += `📱 *মোবাইল:* ${phoneNumber.trim()}\n`;
+      message += `📍 *ঠিকানা:* ${deliveryAddress.trim()}\n`;
+      message += `🚚 *ডেলিভারি এরিয়া:* ${areaName}\n`;
+      if (notes.trim()) {
+        message += `📝 *বিশেষ নোট:* ${notes.trim()}\n`;
+      }
+      message += `--------------------------------\n`;
+      message += `📦 *অর্ডারকৃত পণ্যসমূহ:*\n`;
+
+      items.forEach((item, index) => {
+        const price = getEffectiveUnitPrice(item.product);
+        const sizeLabel = item.selectedSize ? ` (সাইজ: ${item.selectedSize})` : '';
+        message += `${index + 1}. ${item.product.name}${sizeLabel}\n`;
+        message += `   পরিমাণ: ${item.quantity} টি | দাম: ৳${(price * item.quantity).toLocaleString()}\n`;
+      });
+
+      message += `--------------------------------\n`;
+      message += `💵 *সাবটোটাল:* ৳${subtotal.toLocaleString()}\n`;
+      message += `🚚 *ডেলিভারি ফি:* ৳${deliveryFee}\n`;
+      message += `💰 *সর্বমোট প্রদেয় বিল:* ৳${grandTotal.toLocaleString()}\n`;
+      message += `--------------------------------\n`;
+      message += `(অনুগ্রহ করে অর্ডারটি দ্রুত কনফার্ম করে ডেলিভারি আপডেট জানান)`;
+
+      const targetUrl = `https://wa.me/${WHATSAPP_INTL}?text=${encodeURIComponent(message)}`;
+      setWhatsappUrl(targetUrl);
+      setGeneratedOrderNumber(finalOrderId);
+      setConfirmedTotal(grandTotal);
+      setOrderConfirmed(true);
+      clearCart();
+      window.dispatchEvent(new CustomEvent('muaz-products-updated'));
+      window.open(targetUrl, '_blank');
+    } catch (err: any) {
+      setErrors({
+        general: err?.message || 'অর্ডার প্রসেস করতে সমস্যা হয়েছে। আবার চেষ্টা করুন।',
+      });
+    } finally {
+      setIsSubmitting(false);
     }
-    message += `--------------------------------\n`;
-    message += `📦 *অর্ডারকৃত পণ্যসমূহ:*\n`;
-
-    items.forEach((item, index) => {
-      const price = item.product.salePrice || item.product.price;
-      message += `${index + 1}. ${item.product.name}\n`;
-      message += `   পরিমাণ: ${item.quantity} টি | দাম: ৳${(price * item.quantity).toLocaleString()}\n`;
-    });
-
-    message += `--------------------------------\n`;
-    message += `💵 *সাবটোটাল:* ৳${subtotal.toLocaleString()}\n`;
-    message += `🚚 *ডেলিভারি ফি:* ৳${deliveryFee}\n`;
-    message += `💰 *সর্বমোট প্রদেয় বিল:* ৳${grandTotal.toLocaleString()}\n`;
-    message += `--------------------------------\n`;
-    message += `(অনুগ্রহ করে অর্ডারটি দ্রুত কনফার্ম করে ডেলিভারি আপডেট জানান)`;
-
-    const targetUrl = `https://wa.me/${WHATSAPP_INTL}?text=${encodeURIComponent(message)}`;
-    setWhatsappUrl(targetUrl);
-    setGeneratedOrderNumber(orderId);
-    setOrderConfirmed(true);
-
-    // Save to persistent database / orderService
-    orderService.createOrder({
-      orderNumber: orderId,
-      customerName: customerName.trim(),
-      phoneNumber: cleanPhone,
-      deliveryAddress: deliveryAddress.trim(),
-      deliveryArea,
-      notes: notes.trim() || undefined,
-      items: [...items],
-      subtotal,
-      deliveryFee,
-      total: grandTotal,
-      orderDate: new Date().toISOString(),
-      status: 'pending',
-      paymentStatus: 'cod',
-    }).catch((err) => console.error('Order save error:', err));
-
-    window.open(targetUrl, '_blank');
-    clearCart();
   };
 
   const handleClose = () => {
     setIsCheckoutOpen(false);
     setOrderConfirmed(false);
+    setErrors({});
   };
 
   return (
@@ -189,7 +217,7 @@ export const CheckoutModal: React.FC = () => {
               <div className="flex justify-between pt-1 border-t border-gray-200">
                 <span>সর্বমোট বিল:</span>
                 <span className="font-bold text-[#16A34A] text-sm tabular-nums">
-                  ৳{grandTotal.toLocaleString()}
+                  ৳{(confirmedTotal || grandTotal).toLocaleString()}
                 </span>
               </div>
             </div>
@@ -334,7 +362,34 @@ export const CheckoutModal: React.FC = () => {
             </div>
 
             {/* Bill Summary */}
-            <div className="p-3.5 bg-gray-50 rounded-xl border border-gray-100 space-y-1.5 text-xs">
+            <div className="p-3.5 bg-gray-50 rounded-xl border border-gray-100 space-y-2 text-xs">
+              {items.length > 0 && (
+                <div className="space-y-1 pb-2 border-b border-gray-200">
+                  {items.map((item) => {
+                    const unitPrice = getEffectiveUnitPrice(item.product);
+                    return (
+                      <div
+                        key={`${item.product.id}-${item.selectedSize || 'default'}`}
+                        className="flex items-center justify-between gap-2 text-gray-700"
+                      >
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="truncate font-medium">{item.product.name}</span>
+                          {item.selectedSize && (
+                            <span className="shrink-0 text-[10px] font-bold bg-emerald-50 text-[#16A34A] border border-emerald-200 px-1.5 py-0.5 rounded">
+                              সাইজ: {item.selectedSize}
+                            </span>
+                          )}
+                          <span className="shrink-0 text-gray-400">× {item.quantity}</span>
+                        </div>
+                        <span className="font-mono text-gray-900 shrink-0">
+                          ৳{(unitPrice * item.quantity).toLocaleString()}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
               <div className="flex justify-between text-gray-500">
                 <span>সাবটোটাল</span>
                 <span className="font-mono text-gray-900">৳{subtotal.toLocaleString()}</span>
@@ -358,10 +413,11 @@ export const CheckoutModal: React.FC = () => {
 
             <button
               type="submit"
-              className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-[#16A34A] hover:bg-[#15803D] text-white font-bold text-xs sm:text-sm rounded-xl transition-all shadow-[0_4px_14px_rgba(22,163,74,0.3)]"
+              disabled={isSubmitting}
+              className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-[#16A34A] hover:bg-[#15803D] disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold text-xs sm:text-sm rounded-xl transition-all shadow-[0_4px_14px_rgba(22,163,74,0.3)]"
             >
               <MessageCircle className="w-4 h-4 fill-current" />
-              <span>WhatsApp-এ অর্ডার কনফার্ম করুন</span>
+              <span>{isSubmitting ? 'যাচাই ও কনফার্ম হচ্ছে...' : 'WhatsApp-এ অর্ডার কনফার্ম করুন'}</span>
             </button>
           </form>
         )}

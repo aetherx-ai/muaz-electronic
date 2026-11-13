@@ -30,6 +30,16 @@ interface CategoryRecord {
   updatedAt: string;
 }
 
+type ClothingSize = 'S' | 'M' | 'L' | 'XL' | 'XXL';
+const CLOTHING_SIZES: ClothingSize[] = ['S', 'M', 'L', 'XL', 'XXL'];
+
+interface SizeStockEntry {
+  enabled: boolean;
+  stock: number;
+}
+
+type SizeInventoryMap = Partial<Record<ClothingSize, SizeStockEntry>>;
+
 interface ProductRecord {
   id: string;
   name: string;
@@ -39,6 +49,8 @@ interface ProductRecord {
   category: string;
   brand?: string;
   stock: number;
+  hasSizes?: boolean;
+  sizeInventory?: SizeInventoryMap;
   status: 'published' | 'draft';
   isFeatured?: boolean;
   image: string;
@@ -47,6 +59,39 @@ interface ProductRecord {
   specs?: { label: string; value: string }[];
   createdAt?: string;
   updatedAt?: string;
+}
+
+interface OrderItemRecord {
+  product: {
+    id: string;
+    name: string;
+    price: number;
+    salePrice?: number;
+    image?: string;
+    [key: string]: unknown;
+  };
+  quantity: number;
+  selectedSize?: ClothingSize;
+}
+
+interface OrderRecord {
+  id: string;
+  orderNumber: string;
+  customerName: string;
+  phoneNumber: string;
+  deliveryAddress: string;
+  deliveryArea: 'inside_dhaka' | 'outside_dhaka';
+  notes?: string;
+  items: OrderItemRecord[];
+  subtotal: number;
+  deliveryFee: number;
+  total: number;
+  orderDate: string;
+  status: 'pending' | 'confirmed' | 'shipped' | 'delivered' | 'cancelled';
+  paymentStatus: 'cod' | 'paid' | 'pending';
+  stockDeducted: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface StoreSettingsRecord {
@@ -62,6 +107,7 @@ interface StoreSettingsRecord {
 interface DatabaseSchema {
   categories: CategoryRecord[];
   products: ProductRecord[];
+  orders: OrderRecord[];
   settings: StoreSettingsRecord;
 }
 
@@ -255,6 +301,46 @@ const DEFAULT_PRODUCTS: ProductRecord[] = [
   },
 ];
 
+function sanitizeWholeStock(value: unknown): number {
+  const num = Number(value);
+  if (!Number.isFinite(num) || num < 0) return 0;
+  return Math.floor(num);
+}
+
+function normalizeSizeInventory(input: unknown): SizeInventoryMap | undefined {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    return undefined;
+  }
+  const raw = input as Record<string, unknown>;
+  const normalized: SizeInventoryMap = {};
+  let hasAnyEnabled = false;
+
+  for (const sz of CLOTHING_SIZES) {
+    const entry = raw[sz];
+    if (entry && typeof entry === 'object') {
+      const e = entry as Record<string, unknown>;
+      const enabled = Boolean(e.enabled);
+      const stock = enabled ? sanitizeWholeStock(e.stock) : 0;
+      normalized[sz] = { enabled, stock };
+      if (enabled) hasAnyEnabled = true;
+    }
+  }
+  return hasAnyEnabled ? normalized : undefined;
+}
+
+function hasEnabledSizes(product: ProductRecord): boolean {
+  if (!product.sizeInventory) return false;
+  return CLOTHING_SIZES.some((sz) => Boolean(product.sizeInventory?.[sz]?.enabled));
+}
+
+function computeTotalStockFromSizes(sizeInventory?: SizeInventoryMap): number {
+  if (!sizeInventory) return 0;
+  return CLOTHING_SIZES.reduce((sum, sz) => {
+    const entry = sizeInventory[sz];
+    return entry?.enabled ? sum + sanitizeWholeStock(entry.stock) : sum;
+  }, 0);
+}
+
 function readDb(): DatabaseSchema {
   if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -264,6 +350,7 @@ function readDb(): DatabaseSchema {
     const initialDb: DatabaseSchema = {
       categories: DEFAULT_CATEGORIES,
       products: DEFAULT_PRODUCTS,
+      orders: [],
       settings: DEFAULT_SETTINGS,
     };
     fs.writeFileSync(DB_FILE, JSON.stringify(initialDb, null, 2), 'utf-8');
@@ -272,7 +359,7 @@ function readDb(): DatabaseSchema {
 
   try {
     const content = fs.readFileSync(DB_FILE, 'utf-8');
-    const parsed = JSON.parse(content) as DatabaseSchema;
+    const parsed = JSON.parse(content) as Partial<DatabaseSchema>;
     let modified = false;
 
     if (!parsed.categories || parsed.categories.length === 0) {
@@ -285,15 +372,27 @@ function readDb(): DatabaseSchema {
       modified = true;
     }
 
-    if (modified) {
-      writeDb(parsed);
+    if (!Array.isArray(parsed.orders)) {
+      parsed.orders = [];
+      modified = true;
     }
-    return parsed;
+
+    if (!parsed.settings) {
+      parsed.settings = DEFAULT_SETTINGS;
+      modified = true;
+    }
+
+    const result = parsed as DatabaseSchema;
+    if (modified) {
+      writeDb(result);
+    }
+    return result;
   } catch (err) {
     console.error('Error reading database file:', err);
     return {
       categories: DEFAULT_CATEGORIES,
       products: DEFAULT_PRODUCTS,
+      orders: [],
       settings: DEFAULT_SETTINGS,
     };
   }
@@ -310,6 +409,17 @@ function writeDb(data: DatabaseSchema): void {
   } catch (err) {
     console.error('Error writing database file:', err);
   }
+}
+
+// Mutex lock to guarantee strict serialization of read-modify-write order/stock mutations
+let dbLockChain: Promise<void> = Promise.resolve();
+function withDbLock<T>(fn: () => T | Promise<T>): Promise<T> {
+  const next = dbLockChain.then(() => fn());
+  dbLockChain = next.then(
+    () => undefined,
+    () => undefined
+  );
+  return next;
 }
 
 // -----------------------------------------------------------------------------
@@ -564,54 +674,390 @@ app.get('/api/products', (_req: Request, res: Response) => {
   res.json(db.products);
 });
 
-app.post('/api/products', (req: Request, res: Response) => {
-  const productData = req.body;
-  const db = readDb();
-  const now = new Date().toISOString();
-
-  const newProduct: ProductRecord = {
-    ...productData,
-    id: productData.id || `product-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-    createdAt: now,
-    updatedAt: now,
-  };
-
-  db.products.unshift(newProduct);
-  writeDb(db);
-
-  res.status(201).json({ product: newProduct, success: true });
-});
-
-app.put('/api/products/:id', (req: Request, res: Response) => {
+app.get('/api/products/:id', (req: Request, res: Response) => {
   const { id } = req.params;
-  const updateData = req.body;
   const db = readDb();
-
-  const index = db.products.findIndex((p) => p.id === id);
-  if (index === -1) {
+  const product = db.products.find((p) => p.id === id);
+  if (!product) {
     return res.status(404).json({ error: 'প্রোডাক্ট পাওয়া যায়নি' });
   }
-
-  const updated: ProductRecord = {
-    ...db.products[index],
-    ...updateData,
-    updatedAt: new Date().toISOString(),
-  };
-
-  db.products[index] = updated;
-  writeDb(db);
-
-  res.json({ product: updated, success: true });
+  return res.json(product);
 });
 
-app.delete('/api/products/:id', (req: Request, res: Response) => {
-  const { id } = req.params;
+app.post('/api/products', async (req: Request, res: Response) => {
+  await withDbLock(() => {
+    const productData = req.body;
+    const db = readDb();
+    const now = new Date().toISOString();
+
+    const normalizedSizes = normalizeSizeInventory(productData.sizeInventory);
+    const hasSizes = Boolean(normalizedSizes);
+    const computedStock = hasSizes
+      ? computeTotalStockFromSizes(normalizedSizes)
+      : sanitizeWholeStock(productData.stock);
+
+    const newProduct: ProductRecord = {
+      ...productData,
+      id: productData.id || `product-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      stock: computedStock,
+      hasSizes,
+      sizeInventory: normalizedSizes,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    db.products.unshift(newProduct);
+    writeDb(db);
+
+    res.status(201).json({ product: newProduct, success: true });
+  });
+});
+
+app.put('/api/products/:id', async (req: Request, res: Response) => {
+  await withDbLock(() => {
+    const { id } = req.params;
+    const updateData = req.body;
+    const db = readDb();
+
+    const index = db.products.findIndex((p) => p.id === id);
+    if (index === -1) {
+      return res.status(404).json({ error: 'প্রোডাক্ট পাওয়া যায়নি' });
+    }
+
+    const existing = db.products[index];
+    const sizeInventoryProvided =
+      Object.prototype.hasOwnProperty.call(updateData, 'sizeInventory') ||
+      updateData.hasSizes === false;
+    const normalizedSizes = sizeInventoryProvided
+      ? normalizeSizeInventory(updateData.sizeInventory)
+      : existing.sizeInventory;
+    const hasSizes = Boolean(normalizedSizes);
+
+    const computedStock = hasSizes
+      ? computeTotalStockFromSizes(normalizedSizes)
+      : updateData.stock !== undefined
+      ? sanitizeWholeStock(updateData.stock)
+      : existing.stock;
+
+    const updated: ProductRecord = {
+      ...existing,
+      ...updateData,
+      id: existing.id,
+      stock: computedStock,
+      hasSizes,
+      sizeInventory: normalizedSizes,
+      updatedAt: new Date().toISOString(),
+    };
+
+    db.products[index] = updated;
+    writeDb(db);
+
+    return res.json({ product: updated, success: true });
+  });
+});
+
+app.delete('/api/products/:id', async (req: Request, res: Response) => {
+  await withDbLock(() => {
+    const { id } = req.params;
+    const db = readDb();
+
+    db.products = db.products.filter((p) => p.id !== id);
+    writeDb(db);
+
+    res.json({ success: true });
+  });
+});
+
+// -----------------------------------------------------------------------------
+// ORDERS & ATOMIC INVENTORY DEDUCTION / RESTORATION API ROUTES
+// -----------------------------------------------------------------------------
+app.get('/api/orders', (_req: Request, res: Response) => {
   const db = readDb();
+  const sorted = [...(db.orders || [])].sort(
+    (a, b) => new Date(b.createdAt || b.orderDate).getTime() - new Date(a.createdAt || a.orderDate).getTime()
+  );
+  res.json(sorted);
+});
 
-  db.products = db.products.filter((p) => p.id !== id);
-  writeDb(db);
+app.post('/api/orders', async (req: Request, res: Response) => {
+  await withDbLock(() => {
+    const payload = req.body as Partial<OrderRecord>;
+    const items = Array.isArray(payload.items) ? payload.items : [];
 
-  res.json({ success: true });
+    if (items.length === 0) {
+      return res.status(400).json({ success: false, error: 'অর্ডারে কোনো পণ্য নেই।' });
+    }
+
+    const db = readDb();
+    const now = new Date().toISOString();
+
+    // Aggregate requested quantities per (productId, selectedSize) to prevent split-line overselling
+    const aggregatedRequests = new Map<
+      string,
+      { productId: string; productName: string; selectedSize?: ClothingSize; quantity: number }
+    >();
+
+    for (const item of items) {
+      const productId = item?.product?.id;
+      const qty = Number(item?.quantity);
+      const selectedSize = item?.selectedSize;
+
+      if (!productId || !Number.isInteger(qty) || qty <= 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'পণ্যের পরিমাণ সঠিক পূর্ণসংখ্যা (১ বা তার বেশি) হতে হবে।',
+        });
+      }
+
+      const key = `${productId}::${selectedSize || ''}`;
+      const existingReq = aggregatedRequests.get(key);
+      if (existingReq) {
+        existingReq.quantity += qty;
+      } else {
+        aggregatedRequests.set(key, {
+          productId,
+          productName: item.product?.name || productId,
+          selectedSize,
+          quantity: qty,
+        });
+      }
+    }
+
+    // Also aggregate total requested quantity per non-sized product
+    const productIndexMap = new Map<string, number>();
+    db.products.forEach((p, idx) => productIndexMap.set(p.id, idx));
+
+    // PHASE 1: Validate every requested line item before mutating any stock
+    for (const reqItem of aggregatedRequests.values()) {
+      const prodIdx = productIndexMap.get(reqItem.productId);
+      if (prodIdx === undefined) {
+        return res.status(400).json({
+          success: false,
+          error: `"${reqItem.productName}" স্টোরে পাওয়া যায়নি।`,
+        });
+      }
+
+      const prod = db.products[prodIdx];
+      if (hasEnabledSizes(prod)) {
+        const size = reqItem.selectedSize;
+        if (!size || !CLOTHING_SIZES.includes(size)) {
+          return res.status(400).json({
+            success: false,
+            error: `"${prod.name}" অর্ডার করতে অনুগ্রহ করে একটি সাইজ নির্বাচন করুন।`,
+          });
+        }
+        const entry = prod.sizeInventory?.[size];
+        if (!entry?.enabled) {
+          return res.status(400).json({
+            success: false,
+            error: `"${prod.name}" এর সাইজ "${size}" বর্তমানে উপলব্ধ নয়।`,
+          });
+        }
+        const available = sanitizeWholeStock(entry.stock);
+        if (reqItem.quantity > available) {
+          return res.status(400).json({
+            success: false,
+            error: `"${prod.name}" (সাইজ: ${size}) এর পর্যাপ্ত স্টক নেই। উপলব্ধ: ${available} টি, চাওয়া হয়েছে: ${reqItem.quantity} টি।`,
+          });
+        }
+      } else {
+        const available = sanitizeWholeStock(prod.stock);
+        if (reqItem.quantity > available) {
+          return res.status(400).json({
+            success: false,
+            error: `"${prod.name}" এর পর্যাপ্ত স্টক নেই। উপলব্ধ: ${available} টি, চাওয়া হয়েছে: ${reqItem.quantity} টি।`,
+          });
+        }
+      }
+    }
+
+    // PHASE 2: Deduct exact quantities atomically (cloned products updated in-memory, written once)
+    for (const reqItem of aggregatedRequests.values()) {
+      const prodIdx = productIndexMap.get(reqItem.productId)!;
+      const prod = { ...db.products[prodIdx] };
+
+      if (hasEnabledSizes(prod) && reqItem.selectedSize && prod.sizeInventory) {
+        const nextSizeInv: SizeInventoryMap = { ...prod.sizeInventory };
+        const prevEntry = nextSizeInv[reqItem.selectedSize]!;
+        nextSizeInv[reqItem.selectedSize] = {
+          enabled: true,
+          stock: Math.max(0, sanitizeWholeStock(prevEntry.stock) - reqItem.quantity),
+        };
+        prod.sizeInventory = nextSizeInv;
+        prod.hasSizes = true;
+        prod.stock = computeTotalStockFromSizes(nextSizeInv);
+      } else {
+        prod.stock = Math.max(0, sanitizeWholeStock(prod.stock) - reqItem.quantity);
+      }
+      prod.updatedAt = now;
+      db.products[prodIdx] = prod;
+    }
+
+    const orderNumber =
+      payload.orderNumber || `ME-${Date.now().toString().slice(-6)}`;
+    const newOrder: OrderRecord = {
+      id: payload.id || `ord-${orderNumber.toLowerCase()}-${Math.random().toString(36).slice(2, 6)}`,
+      orderNumber,
+      customerName: String(payload.customerName || '').trim(),
+      phoneNumber: String(payload.phoneNumber || '').trim(),
+      deliveryAddress: String(payload.deliveryAddress || '').trim(),
+      deliveryArea: payload.deliveryArea === 'outside_dhaka' ? 'outside_dhaka' : 'inside_dhaka',
+      notes: payload.notes ? String(payload.notes).trim() : undefined,
+      items: items.map((item) => ({
+        ...item,
+        quantity: sanitizeWholeStock(item.quantity),
+        selectedSize: item.selectedSize,
+      })),
+      subtotal: Number(payload.subtotal || 0),
+      deliveryFee: Number(payload.deliveryFee || 0),
+      total: Number(payload.total || 0),
+      orderDate: payload.orderDate || now,
+      status: payload.status && payload.status !== 'cancelled' ? payload.status : 'pending',
+      paymentStatus: payload.paymentStatus || 'cod',
+      stockDeducted: true,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    db.orders.unshift(newOrder);
+    writeDb(db);
+
+    return res.status(201).json({ success: true, order: newOrder });
+  });
+});
+
+const handleOrderStatusUpdate = async (req: Request, res: Response) => {
+  await withDbLock(() => {
+    const { id } = req.params;
+    const { status, paymentStatus } = req.body as {
+      status?: OrderRecord['status'];
+      paymentStatus?: OrderRecord['paymentStatus'];
+    };
+
+    if (!status) {
+      return res.status(400).json({ success: false, error: 'অর্ডার স্ট্যাটাস প্রদান করা হয়নি।' });
+    }
+
+    const db = readDb();
+    const orderIdx = db.orders.findIndex((o) => o.id === id || o.orderNumber === id);
+    if (orderIdx === -1) {
+      return res.status(404).json({ success: false, error: 'অর্ডার পাওয়া যায়নি' });
+    }
+
+    const existingOrder = db.orders[orderIdx];
+    const now = new Date().toISOString();
+    let nextStockDeducted = existingOrder.stockDeducted === true;
+
+    // 1. Cancelled transition -> restore stock once if previously deducted
+    if (status === 'cancelled' && existingOrder.stockDeducted === true) {
+      for (const item of existingOrder.items || []) {
+        const prodIdx = db.products.findIndex((p) => p.id === item.product?.id);
+        if (prodIdx === -1) continue;
+
+        const prod = { ...db.products[prodIdx] };
+        const qty = sanitizeWholeStock(item.quantity);
+        if (qty <= 0) continue;
+
+        if (hasEnabledSizes(prod) && item.selectedSize && prod.sizeInventory?.[item.selectedSize]) {
+          const nextSizeInv: SizeInventoryMap = { ...prod.sizeInventory };
+          const currentEntry = nextSizeInv[item.selectedSize]!;
+          nextSizeInv[item.selectedSize] = {
+            enabled: currentEntry.enabled,
+            stock: sanitizeWholeStock(currentEntry.stock) + qty,
+          };
+          prod.sizeInventory = nextSizeInv;
+          prod.hasSizes = true;
+          prod.stock = computeTotalStockFromSizes(nextSizeInv);
+        } else {
+          prod.stock = sanitizeWholeStock(prod.stock) + qty;
+        }
+        prod.updatedAt = now;
+        db.products[prodIdx] = prod;
+      }
+      nextStockDeducted = false;
+    }
+    // 2. Reactivating a cancelled order -> validate and re-deduct stock
+    else if (
+      existingOrder.status === 'cancelled' &&
+      status !== 'cancelled' &&
+      existingOrder.stockDeducted === false
+    ) {
+      for (const item of existingOrder.items || []) {
+        const prod = db.products.find((p) => p.id === item.product?.id);
+        if (!prod) {
+          return res.status(400).json({
+            success: false,
+            error: `"${item.product?.name || 'পণ্য'}" আর স্টোরে বিদ্যমান নয়।`,
+          });
+        }
+        const qty = sanitizeWholeStock(item.quantity);
+        if (hasEnabledSizes(prod) && item.selectedSize) {
+          const avail = sanitizeWholeStock(prod.sizeInventory?.[item.selectedSize]?.stock);
+          if (qty > avail) {
+            return res.status(400).json({
+              success: false,
+              error: `"${prod.name}" (সাইজ: ${item.selectedSize}) পুনরায় সক্রিয় করার মতো পর্যাপ্ত স্টক নেই (উপলব্ধ: ${avail})।`,
+            });
+          }
+        } else if (qty > sanitizeWholeStock(prod.stock)) {
+          return res.status(400).json({
+            success: false,
+            error: `"${prod.name}" পুনরায় সক্রিয় করার মতো পর্যাপ্ত স্টক নেই (উপলব্ধ: ${prod.stock})।`,
+          });
+        }
+      }
+
+      for (const item of existingOrder.items || []) {
+        const prodIdx = db.products.findIndex((p) => p.id === item.product?.id);
+        if (prodIdx === -1) continue;
+        const prod = { ...db.products[prodIdx] };
+        const qty = sanitizeWholeStock(item.quantity);
+
+        if (hasEnabledSizes(prod) && item.selectedSize && prod.sizeInventory?.[item.selectedSize]) {
+          const nextSizeInv: SizeInventoryMap = { ...prod.sizeInventory };
+          const currentEntry = nextSizeInv[item.selectedSize]!;
+          nextSizeInv[item.selectedSize] = {
+            enabled: currentEntry.enabled,
+            stock: Math.max(0, sanitizeWholeStock(currentEntry.stock) - qty),
+          };
+          prod.sizeInventory = nextSizeInv;
+          prod.hasSizes = true;
+          prod.stock = computeTotalStockFromSizes(nextSizeInv);
+        } else {
+          prod.stock = Math.max(0, sanitizeWholeStock(prod.stock) - qty);
+        }
+        prod.updatedAt = now;
+        db.products[prodIdx] = prod;
+      }
+      nextStockDeducted = true;
+    }
+
+    const updatedOrder: OrderRecord = {
+      ...existingOrder,
+      status,
+      paymentStatus: paymentStatus || existingOrder.paymentStatus || 'cod',
+      stockDeducted: nextStockDeducted,
+      updatedAt: now,
+    };
+
+    db.orders[orderIdx] = updatedOrder;
+    writeDb(db);
+
+    return res.json({ success: true, order: updatedOrder });
+  });
+};
+
+app.patch('/api/orders/:id/status', handleOrderStatusUpdate);
+app.put('/api/orders/:id/status', handleOrderStatusUpdate);
+
+app.delete('/api/orders/:id', async (req: Request, res: Response) => {
+  await withDbLock(() => {
+    const { id } = req.params;
+    const db = readDb();
+    db.orders = db.orders.filter((o) => o.id !== id && o.orderNumber !== id);
+    writeDb(db);
+    res.json({ success: true });
+  });
 });
 
 // -----------------------------------------------------------------------------

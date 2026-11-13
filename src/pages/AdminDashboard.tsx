@@ -7,7 +7,9 @@ import {
   CustomerOrder,
   OrderStatus,
   PaymentStatus,
+  SizeInventoryMap,
 } from '../types';
+import { computeTotalStockFromSizes, hasEnabledSizes } from '../lib/sizeInventory';
 import {
   productService,
   categoryService,
@@ -22,6 +24,7 @@ import { CategoryManagementTab } from '../components/admin/CategoryManagementTab
 import { OrdersTab } from '../components/admin/OrdersTab';
 import { CustomersTab } from '../components/admin/CustomersTab';
 import { InventoryTab } from '../components/admin/InventoryTab';
+import { ClothingSizesTab } from '../components/admin/ClothingSizesTab';
 import { DiscountsTab } from '../components/admin/DiscountsTab';
 import { ReviewsTab } from '../components/admin/ReviewsTab';
 import { AnalyticsTab } from '../components/admin/AnalyticsTab';
@@ -36,6 +39,8 @@ interface AdminDashboardProps {
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore }) => {
   const [currentTab, setCurrentTab] = useState<AdminTab>('overview');
+  const [ordersInitialStatus, setOrdersInitialStatus] = useState<string>('all');
+  const [inventoryInitialFilter, setInventoryInitialFilter] = useState<'all' | 'healthy' | 'low' | 'out'>('all');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
@@ -89,6 +94,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore })
     loadAllData();
   }, []);
 
+  const handleSelectTab = (tab: AdminTab) => {
+    if (tab !== 'orders') setOrdersInitialStatus('all');
+    if (tab !== 'inventory') setInventoryInitialFilter('all');
+    setIsFormModalOpen(false);
+    setEditingProduct(null);
+    setCurrentTab(tab);
+  };
+
   // Compute counters for sidebar badges
   const pendingOrderCount = useMemo(() => {
     return orders.filter((o) => (o.status || 'pending') === 'pending').length;
@@ -96,6 +109,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore })
 
   const lowStockCount = useMemo(() => {
     return products.filter((p) => p.stock < 10).length;
+  }, [products]);
+
+  const sizedProductCount = useMemo(() => {
+    return products.filter((p) => hasEnabledSizes(p)).length;
   }, [products]);
 
   const customerCount = useMemo(() => {
@@ -129,11 +146,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore })
   const handleAddNewProduct = () => {
     setEditingProduct(null);
     setIsFormModalOpen(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleEditProduct = (prod: Product) => {
     setEditingProduct(prod);
     setIsFormModalOpen(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleSaveProduct = async (
@@ -142,19 +161,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore })
     productId?: string
   ): Promise<{ success: boolean; error: string | null }> => {
     if (productId) {
-      // Update
       const res = await productService.updateProduct(productId, productPayload, imageFile);
       if (res.success && res.product) {
         setProducts((prev) => prev.map((p) => (p.id === productId ? res.product! : p)));
+        window.dispatchEvent(new CustomEvent('muaz-products-updated'));
         showToast('success', `"${res.product.name}" সফলভাবে আপডেট করা হয়েছে`);
         return { success: true, error: null };
       }
       return { success: false, error: res.error };
     } else {
-      // Create new
       const res = await productService.createProduct(productPayload, imageFile);
       if (res.product) {
         setProducts((prev) => [res.product!, ...prev]);
+        window.dispatchEvent(new CustomEvent('muaz-products-updated'));
         showToast('success', `"${res.product.name}" সফলভাবে স্টোরে যুক্ত হয়েছে`);
         return { success: true, error: null };
       }
@@ -176,6 +195,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore })
 
     if (res.success) {
       setProducts((prev) => prev.filter((p) => p.id !== deletingProduct.id));
+      window.dispatchEvent(new CustomEvent('muaz-products-updated'));
       setIsDeleteModalOpen(false);
       showToast('success', `"${deletingProduct.name}" সফলভাবে ডিলিট করা হয়েছে`);
       setDeletingProduct(null);
@@ -189,6 +209,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore })
     const res = await productService.updateProduct(product.id, { status: newStatus });
     if (res.success && res.product) {
       setProducts((prev) => prev.map((p) => (p.id === product.id ? res.product! : p)));
+      window.dispatchEvent(new CustomEvent('muaz-products-updated'));
       showToast(
         'success',
         `"${product.name}" এর স্ট্যাটাস "${newStatus.toUpperCase()}" এ পরিবর্তন করা হয়েছে`
@@ -203,6 +224,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore })
     const res = await productService.updateProduct(product.id, { isFeatured: newFeatured });
     if (res.success && res.product) {
       setProducts((prev) => prev.map((p) => (p.id === product.id ? res.product! : p)));
+      window.dispatchEvent(new CustomEvent('muaz-products-updated'));
       showToast(
         'success',
         newFeatured ? `ফিচার্ড প্রোডাক্ট হিসেবে যুক্ত করা হয়েছে` : `ফিচার্ড তালিকা থেকে বাদ দেওয়া হয়েছে`
@@ -220,10 +242,42 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore })
     const res = await productService.updateProduct(productId, { stock: newStock });
     if (res.success && res.product) {
       setProducts((prev) => prev.map((p) => (p.id === productId ? res.product! : p)));
+      window.dispatchEvent(new CustomEvent('muaz-products-updated'));
       showToast('success', `স্টক আপডেট সম্পন্ন: ${newStock} পিস`);
       return { success: true, error: null };
     }
     showToast('error', res.error || 'স্টক আপডেট করা যায়নি');
+    return { success: false, error: res.error };
+  };
+
+  // Size-wise Stock Quick Update Handler
+  const handleUpdateSizeStock = async (
+    productId: string,
+    sizeInventory: SizeInventoryMap | null,
+    fallbackStock?: number
+  ): Promise<{ success: boolean; error: string | null }> => {
+    const hasAnySize =
+      Boolean(sizeInventory) &&
+      Object.values(sizeInventory || {}).some((entry) => Boolean(entry?.enabled));
+    const total = hasAnySize
+      ? computeTotalStockFromSizes(sizeInventory!)
+      : typeof fallbackStock === 'number'
+      ? Math.max(0, Math.floor(fallbackStock))
+      : 0;
+
+    const res = await productService.updateProduct(productId, {
+      hasSizes: hasAnySize,
+      sizeInventory: hasAnySize ? sizeInventory! : undefined,
+      stock: total,
+    });
+    if (res.success && res.product) {
+      setProducts((prev) => prev.map((p) => (p.id === productId ? res.product! : p)));
+      setEditingProduct((prev) => (prev && prev.id === productId ? res.product! : prev));
+      window.dispatchEvent(new CustomEvent('muaz-products-updated'));
+      showToast('success', `সাইজ-ভিত্তিক স্টক আপডেট সম্পন্ন (মোট: ${total} পিস)`);
+      return { success: true, error: null };
+    }
+    showToast('error', res.error || 'সাইজ স্টক আপডেট করা যায়নি');
     return { success: false, error: res.error };
   };
 
@@ -309,6 +363,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore })
             : o
         )
       );
+      const [updatedProds, updatedOrds] = await Promise.all([
+        productService.getAllProductsAdmin(),
+        orderService.getAllOrders(),
+      ]);
+      setProducts(updatedProds);
+      setOrders(updatedOrds);
+      window.dispatchEvent(new CustomEvent('muaz-products-updated'));
       showToast('success', `অর্ডার স্ট্যাটাস "${status.toUpperCase()}" এ হালনাগাদ করা হয়েছে`);
     } else {
       showToast('error', res.error || 'অর্ডার স্ট্যাটাস পরিবর্তন ব্যর্থ হয়েছে');
@@ -327,20 +388,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore })
   };
 
   return (
-    <div className="min-h-screen bg-[#F8FAF9] text-slate-900 flex flex-col font-sans">
-      
+    <div className="min-h-screen bg-[#F6F8F7] text-slate-900 flex flex-col font-sans">
       {/* Toast Notification */}
       {toast && (
         <div className="fixed top-5 right-5 z-50 animate-in slide-in-from-top-3 duration-200">
           <div
-            className={`px-4 py-3 rounded-xl shadow-xl border flex items-center gap-2.5 text-xs font-semibold ${
+            className={`px-4 py-3 rounded-[12px] shadow-xl border flex items-center gap-2.5 text-xs font-semibold bg-white ${
               toast.type === 'success'
-                ? 'bg-white text-emerald-800 border-emerald-200 shadow-emerald-950/5'
-                : 'bg-white text-rose-800 border-rose-200 shadow-rose-950/5'
+                ? 'text-[#15803D] border-emerald-200 shadow-emerald-950/5'
+                : 'text-rose-700 border-rose-200 shadow-rose-950/5'
             }`}
           >
             {toast.type === 'success' ? (
-              <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+              <CheckCircle className="w-4 h-4 text-[#16A34A] shrink-0" />
             ) : (
               <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
             )}
@@ -352,7 +412,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore })
       {/* Admin Sidebar Navigation */}
       <AdminSidebar
         currentTab={currentTab}
-        setCurrentTab={setCurrentTab}
+        setCurrentTab={handleSelectTab}
         isOpen={sidebarOpen}
         setIsOpen={setSidebarOpen}
         isCollapsed={isSidebarCollapsed}
@@ -362,22 +422,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore })
         pendingOrderCount={pendingOrderCount}
         lowStockCount={lowStockCount}
         customerCount={customerCount}
+        sizedProductCount={sizedProductCount}
         activeCouponsCount={activeCouponsCount}
         pendingReviewsCount={pendingReviewsCount}
         onBackToStore={onBackToStore}
       />
 
-      {/* Main Content Area (dynamic left padding based on sidebar collapsed state) */}
+      {/* Main Content Area */}
       <div
         className={`flex-1 flex flex-col min-w-0 transition-all duration-200 ease-in-out ${
-          isSidebarCollapsed ? 'lg:pl-[76px]' : 'lg:pl-[264px]'
+          isSidebarCollapsed ? 'lg:pl-[76px]' : 'lg:pl-[256px]'
         }`}
       >
-        
         {/* Top Navbar Header */}
         <AdminHeader
           currentTab={currentTab}
-          setCurrentTab={setCurrentTab}
+          setCurrentTab={handleSelectTab}
           isSidebarCollapsed={isSidebarCollapsed}
           toggleSidebarCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
           openMobileSidebar={() => setSidebarOpen(true)}
@@ -391,16 +451,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore })
             handleEditProduct(p);
           }}
           onSelectOrder={(_o) => {
+            setOrdersInitialStatus('all');
             setCurrentTab('orders');
           }}
         />
 
-        {/* Tab Content */}
+        {/* Tab Content or Create/Edit Product Page */}
         <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">
-          {loading && products.length === 0 ? (
-            <div className="py-24 text-center">
-              <RefreshCw className="w-8 h-8 text-blue-600 animate-spin mx-auto mb-3" />
-              <p className="text-xs text-slate-500 font-medium">ডাটাবেজ থেকে তথ্য লোড হচ্ছে...</p>
+          {isFormModalOpen ? (
+            <ProductFormModal
+              isOpen={isFormModalOpen}
+              onClose={() => {
+                setIsFormModalOpen(false);
+                setEditingProduct(null);
+              }}
+              onSave={handleSaveProduct}
+              onSaveSizeInventory={handleUpdateSizeStock}
+              productToEdit={editingProduct}
+              categories={categories}
+              onAddCategory={handleAddCategory}
+              onNavigateTab={(tab) => {
+                setIsFormModalOpen(false);
+                setEditingProduct(null);
+                handleSelectTab(tab);
+              }}
+              onBackToStore={onBackToStore}
+            />
+          ) : loading && products.length === 0 ? (
+            <div className="py-24 text-center bg-white border border-slate-200/80 rounded-[12px] shadow-xs">
+              <RefreshCw className="w-7 h-7 text-[#16A34A] animate-spin mx-auto mb-3" />
+              <p className="text-xs text-slate-600 font-medium">ডাটাবেজ থেকে তথ্য লোড হচ্ছে...</p>
             </div>
           ) : (
             <>
@@ -410,9 +490,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore })
                   orders={orders}
                   onAddNewProduct={handleAddNewProduct}
                   onEditProduct={handleEditProduct}
-                  onViewAllProducts={() => setCurrentTab('products')}
-                  onViewAllOrders={(_filter) => setCurrentTab('orders')}
-                  onViewAllCategories={() => setCurrentTab('categories')}
+                  onViewAllProducts={() => handleSelectTab('products')}
+                  onViewAllOrders={(filter) => {
+                    setOrdersInitialStatus(filter || 'all');
+                    setCurrentTab('orders');
+                  }}
+                  onViewAllCategories={() => handleSelectTab('categories')}
+                  onViewLowStock={() => {
+                    setInventoryInitialFilter('low');
+                    setCurrentTab('inventory');
+                  }}
+                  onViewClothingSizes={() => handleSelectTab('clothing-sizes')}
                   onUpdateOrderStatus={handleUpdateOrderStatus}
                 />
               )}
@@ -426,7 +514,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore })
                   onDeleteProduct={handleDeleteClick}
                   onToggleStatus={handleToggleStatus}
                   onToggleFeatured={handleToggleFeatured}
-                  onManageCategories={() => setCurrentTab('categories')}
+                  onManageCategories={() => handleSelectTab('categories')}
                 />
               )}
 
@@ -446,72 +534,50 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore })
               {currentTab === 'orders' && (
                 <OrdersTab
                   orders={orders}
+                  initialStatusFilter={ordersInitialStatus}
                   onUpdateOrderStatus={handleUpdateOrderStatus}
                   onRefreshData={loadAllData}
                 />
               )}
 
-              {currentTab === 'customers' && (
-                <CustomersTab
-                  orders={orders}
-                />
-              )}
+              {currentTab === 'customers' && <CustomersTab orders={orders} />}
 
               {currentTab === 'inventory' && (
                 <InventoryTab
                   products={products}
+                  initialStockFilter={inventoryInitialFilter}
                   onUpdateStock={handleUpdateStock}
+                  onUpdateSizeStock={handleUpdateSizeStock}
                   onRefreshData={loadAllData}
                 />
               )}
 
-              {currentTab === 'discounts' && (
-                <DiscountsTab
+              {currentTab === 'clothing-sizes' && (
+                <ClothingSizesTab
+                  products={products}
+                  categories={categories}
+                  onUpdateSizeStock={handleUpdateSizeStock}
+                  onEditProduct={handleEditProduct}
+                  onAddNewProduct={handleAddNewProduct}
                   onRefreshData={loadAllData}
                 />
               )}
 
-              {currentTab === 'reviews' && (
-                <ReviewsTab
-                  onRefreshData={loadAllData}
-                />
-              )}
+              {currentTab === 'discounts' && <DiscountsTab onRefreshData={loadAllData} />}
+
+              {currentTab === 'reviews' && <ReviewsTab onRefreshData={loadAllData} />}
 
               {currentTab === 'analytics' && (
-                <AnalyticsTab
-                  products={products}
-                  orders={orders}
-                />
+                <AnalyticsTab products={products} orders={orders} />
               )}
 
               {currentTab === 'settings' && (
-                <StoreSettingsTab
-                  settings={settings}
-                  onSaveSettings={handleSaveSettings}
-                />
+                <StoreSettingsTab settings={settings} onSaveSettings={handleSaveSettings} />
               )}
             </>
           )}
         </main>
       </div>
-
-      <ProductFormModal
-        isOpen={isFormModalOpen}
-        onClose={() => {
-          setIsFormModalOpen(false);
-          setEditingProduct(null);
-        }}
-        onSave={handleSaveProduct}
-        productToEdit={editingProduct}
-        categories={categories}
-        onAddCategory={handleAddCategory}
-        onNavigateTab={(tab) => {
-          setIsFormModalOpen(false);
-          setEditingProduct(null);
-          setCurrentTab(tab);
-        }}
-        onBackToStore={onBackToStore}
-      />
 
       <DeleteConfirmModal
         product={deletingProduct}
@@ -523,7 +589,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore })
         onConfirm={handleConfirmDelete}
         isDeleting={isDeleting}
       />
-
     </div>
   );
 };

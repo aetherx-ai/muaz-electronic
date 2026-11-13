@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ShoppingCart, Heart, Share2, Check } from 'lucide-react';
 import { Product } from '../types';
 import { useCart } from '../context/CartContext';
+import { hasEnabledSizes, isProductOutOfStock, getEffectiveUnitPrice } from '../lib/sizeInventory';
 
 interface ProductCardProps {
   product: Product;
@@ -13,17 +14,23 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   const [justAdded, setJustAdded] = useState(false);
   const [copiedShare, setCopiedShare] = useState(false);
 
-  const isOutOfStock = product.stock <= 0;
-  const currentPrice = product.salePrice && product.salePrice < product.price ? product.salePrice : product.price;
+  const isOutOfStock = isProductOutOfStock(product);
+  const currentPrice = getEffectiveUnitPrice(product);
   const oldPrice = product.salePrice && product.salePrice < product.price ? product.price : null;
   const discountPercent = oldPrice ? Math.round(((oldPrice - currentPrice) / oldPrice) * 100) : null;
 
   const handleAddToCart = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (isOutOfStock) return;
-    addToCart(product, 1);
-    setJustAdded(true);
-    setTimeout(() => setJustAdded(false), 1200);
+    if (hasEnabledSizes(product)) {
+      setSelectedProductForDetail(product);
+      return;
+    }
+    const res = addToCart(product, 1);
+    if (res.added) {
+      setJustAdded(true);
+      setTimeout(() => setJustAdded(false), 1200);
+    }
   };
 
   const handleWishlist = (e: React.MouseEvent) => {

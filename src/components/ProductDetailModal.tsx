@@ -1,35 +1,103 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, ShoppingCart, MessageCircle, ShieldCheck, Check, Truck, AlertCircle } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { WHATSAPP_INTL } from '../data/products';
+import { CLOTHING_SIZES, ClothingSize } from '../types';
+import {
+  hasEnabledSizes,
+  getAvailableStockForSize,
+  getProductTotalStock,
+  isProductOutOfStock,
+  getEffectiveUnitPrice,
+  sanitizeWholeStock,
+  stripInternalSpecs,
+} from '../lib/sizeInventory';
 
 export const ProductDetailModal: React.FC = () => {
-  const { selectedProductForDetail, setSelectedProductForDetail, addToCart } = useCart();
+  const { selectedProductForDetail, setSelectedProductForDetail, addToCart, items } = useCart();
   const [quantity, setQuantity] = useState(1);
+  const [selectedSize, setSelectedSize] = useState<ClothingSize | null>(null);
+  const [sizeError, setSizeError] = useState<string | null>(null);
   const [addedAnimation, setAddedAnimation] = useState(false);
+
+  useEffect(() => {
+    setQuantity(1);
+    setSelectedSize(null);
+    setSizeError(null);
+    setAddedAnimation(false);
+  }, [selectedProductForDetail?.id]);
 
   if (!selectedProductForDetail) return null;
 
   const product = selectedProductForDetail;
-  const isOutOfStock = product.stock <= 0;
-  const currentPrice = product.salePrice && product.salePrice < product.price ? product.salePrice : product.price;
+  const isSizedProduct = hasEnabledSizes(product);
+  const visibleSpecs = stripInternalSpecs(product.specs);
+  const totalAvailableStock = getProductTotalStock(product);
+  const isOutOfStock = isProductOutOfStock(product);
+  const currentPrice = getEffectiveUnitPrice(product);
   const oldPrice = product.salePrice && product.salePrice < product.price ? product.price : null;
   const discountPercent = oldPrice ? Math.round(((oldPrice - currentPrice) / oldPrice) * 100) : null;
 
+  const selectedSizeStock = isSizedProduct
+    ? selectedSize
+      ? getAvailableStockForSize(product, selectedSize)
+      : 0
+    : totalAvailableStock;
+
+  const inCartQty = items.find(
+    (item) =>
+      item.product.id === product.id &&
+      (item.selectedSize || undefined) === (isSizedProduct ? selectedSize || undefined : undefined)
+  )?.quantity || 0;
+
+  const remainingAddableStock = Math.max(0, selectedSizeStock - inCartQty);
+  const stepperMax = isSizedProduct
+    ? selectedSize
+      ? Math.max(1, remainingAddableStock || selectedSizeStock)
+      : 1
+    : Math.max(1, remainingAddableStock || totalAvailableStock);
+
+  const handleSelectSize = (size: ClothingSize, stock: number) => {
+    if (stock <= 0) return;
+    setSelectedSize(size);
+    setSizeError(null);
+    setQuantity(1);
+  };
+
   const handleAddToCart = () => {
     if (isOutOfStock) return;
-    addToCart(product, quantity);
+    if (isSizedProduct && !selectedSize) {
+      setSizeError('দয়া করে আগে একটি সাইজ নির্বাচন করুন');
+      return;
+    }
+
+    const res = addToCart(product, quantity, isSizedProduct ? selectedSize || undefined : undefined);
+    if (!res.added) {
+      setSizeError(res.error || 'কার্টে যোগ করা যায়নি');
+      return;
+    }
+
+    setSizeError(null);
     setAddedAnimation(true);
     setTimeout(() => setAddedAnimation(false), 1500);
   };
 
   const handleWhatsAppOrder = () => {
-    const text = `আসসালামু আলাইকুম, আমি Muaz Electronic থেকে সরাসরি "${product.name}" (পরিমাণ: ${quantity} টি, একক মূল্য: ৳${currentPrice.toLocaleString()}, মোট: ৳${(currentPrice * quantity).toLocaleString()}) অর্ডার করতে চাই।`;
+    if (isOutOfStock) return;
+    if (isSizedProduct && !selectedSize) {
+      setSizeError('দয়া করে আগে একটি সাইজ নির্বাচন করুন');
+      return;
+    }
+    const sizeInfo = isSizedProduct && selectedSize ? `, সাইজ: ${selectedSize}` : '';
+    const text = `আসসালামু আলাইকুম, আমি Muaz Electronic থেকে সরাসরি "${product.name}"${sizeInfo} (পরিমাণ: ${quantity} টি, একক মূল্য: ৳${currentPrice.toLocaleString()}, মোট: ৳${(currentPrice * quantity).toLocaleString()}) অর্ডার করতে চাই।`;
     window.open(`https://wa.me/${WHATSAPP_INTL}?text=${encodeURIComponent(text)}`, '_blank');
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-3.5 sm:p-6 animate-in fade-in duration-200">
+    <div
+      className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-3.5 sm:p-6 animate-in fade-in duration-200"
+      onClick={() => setSelectedProductForDetail(null)}
+    >
       <div
         className="relative w-full max-w-2xl bg-white rounded-[24px] overflow-hidden shadow-2xl my-6 text-left border border-gray-100"
         onClick={(e) => e.stopPropagation()}
@@ -63,9 +131,19 @@ export const ProductDetailModal: React.FC = () => {
                 <div className="text-xs font-semibold bg-rose-50 text-rose-600 px-3 py-1 rounded-full border border-rose-200">
                   আউট অব স্টক
                 </div>
+              ) : isSizedProduct ? (
+                selectedSize ? (
+                  <div className="text-xs font-medium bg-white text-gray-700 px-3 py-1 rounded-full shadow-xs border border-gray-200">
+                    সাইজ {selectedSize} স্টক: {selectedSizeStock} টি উপলব্ধ
+                  </div>
+                ) : (
+                  <div className="text-xs font-medium bg-white text-gray-700 px-3 py-1 rounded-full shadow-xs border border-gray-200">
+                    মোট স্টক: {totalAvailableStock} টি উপলব্ধ
+                  </div>
+                )
               ) : (
                 <div className="text-xs font-medium bg-white text-gray-700 px-3 py-1 rounded-full shadow-xs border border-gray-200">
-                  স্টক: {product.stock} টি উপলব্ধ
+                  স্টক: {totalAvailableStock} টি উপলব্ধ
                 </div>
               )}
             </div>
@@ -130,9 +208,9 @@ export const ProductDetailModal: React.FC = () => {
               )}
 
               {/* Specs */}
-              {product.specs && product.specs.length > 0 && (
+              {visibleSpecs.length > 0 && (
                 <div className="mt-3.5 pt-3 border-t border-gray-100 grid grid-cols-2 gap-2 text-[11px]">
-                  {product.specs.map((spec, i) => (
+                  {visibleSpecs.map((spec, i) => (
                     <div key={i} className="bg-gray-50 p-2 rounded-lg border border-gray-100">
                       <span className="text-gray-400 block">{spec.label}</span>
                       <span className="font-semibold text-gray-800">{spec.value}</span>
@@ -144,13 +222,83 @@ export const ProductDetailModal: React.FC = () => {
 
             {/* Bottom Controls */}
             <div className="mt-6 pt-4 border-t border-gray-100 space-y-3">
-              
+              {/* Clothing Size Selector */}
+              {isSizedProduct && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-gray-700">সাইজ নির্বাচন করুন:</span>
+                    {selectedSize ? (
+                      <span className="font-medium text-[#16A34A]">
+                        উপলব্ধ স্টক: {selectedSizeStock} টি
+                      </span>
+                    ) : (
+                      <span className="text-gray-400">একটি সাইজ বেছে নিন</span>
+                    )}
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    {CLOTHING_SIZES.map((size) => {
+                      const entry = product.sizeInventory?.[size];
+                      const stock = entry?.enabled ? sanitizeWholeStock(entry.stock) : 0;
+                      const sizeOutOfStock = !entry?.enabled || stock <= 0;
+                      const isSelected = selectedSize === size && !sizeOutOfStock;
+                      return (
+                        <button
+                          key={size}
+                          type="button"
+                          disabled={sizeOutOfStock}
+                          onClick={() => handleSelectSize(size, stock)}
+                          aria-label={`সাইজ ${size}${sizeOutOfStock ? ' (Out of Stock)' : ''}`}
+                          aria-pressed={isSelected}
+                          className={`min-w-[60px] px-3 py-1.5 rounded-xl border text-xs font-bold transition-all flex flex-col items-center justify-center ${
+                            sizeOutOfStock
+                              ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed opacity-75'
+                              : isSelected
+                              ? 'bg-[#16A34A] text-white border-[#16A34A] shadow-xs ring-2 ring-[#16A34A]/25'
+                              : 'bg-white text-gray-800 border-gray-200 hover:border-[#16A34A] hover:text-[#16A34A]'
+                          }`}
+                        >
+                          <span className={sizeOutOfStock ? 'line-through' : ''}>{size}</span>
+                          {sizeOutOfStock ? (
+                            <span className="text-[9px] font-medium text-rose-500 leading-tight">
+                              Out of Stock
+                            </span>
+                          ) : (
+                            <span
+                              className={`text-[9px] font-medium leading-tight tabular-nums ${
+                                isSelected ? 'text-white/90' : 'text-gray-500'
+                              }`}
+                            >
+                              {stock} টি
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {selectedSize && inCartQty > 0 && remainingAddableStock === 0 && (
+                    <p className="text-[11px] text-amber-600 font-medium">
+                      সাইজ {selectedSize}-এর সব উপলব্ধ স্টক ({selectedSizeStock} টি) ইতিমধ্যে কার্টে রয়েছে।
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {sizeError && (
+                <div className="p-2 bg-rose-50 border border-rose-200 rounded-lg flex items-center gap-1.5 text-[11px] text-rose-600 font-medium">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  <span>{sizeError}</span>
+                </div>
+              )}
+
               {/* Quantity Stepper */}
               {!isOutOfStock && (
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-medium text-gray-600">পরিমাণ:</span>
                   <div className="flex items-center bg-gray-50 border border-gray-200 rounded-full overflow-hidden text-xs">
                     <button
+                      type="button"
                       onClick={() => setQuantity((q) => Math.max(1, q - 1))}
                       className="px-3 py-1 text-gray-600 hover:bg-gray-100 transition-colors"
                     >
@@ -160,8 +308,10 @@ export const ProductDetailModal: React.FC = () => {
                       {quantity}
                     </span>
                     <button
-                      onClick={() => setQuantity((q) => Math.min(product.stock, q + 1))}
-                      className="px-3 py-1 text-gray-600 hover:bg-gray-100 transition-colors"
+                      type="button"
+                      disabled={(isSizedProduct && !selectedSize) || quantity >= stepperMax}
+                      onClick={() => setQuantity((q) => Math.min(stepperMax, q + 1))}
+                      className="px-3 py-1 text-gray-600 hover:bg-gray-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       +
                     </button>
@@ -205,7 +355,7 @@ export const ProductDetailModal: React.FC = () => {
                   type="button"
                   onClick={handleWhatsAppOrder}
                   disabled={isOutOfStock}
-                  className="flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-semibold text-xs sm:text-sm bg-[#25D366] hover:bg-[#20ba5a] text-white transition-colors shadow-sm"
+                  className="flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-semibold text-xs sm:text-sm bg-[#25D366] hover:bg-[#20ba5a] text-white transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <MessageCircle className="w-4 h-4 fill-current" />
                   <span>WhatsApp অর্ডার</span>
@@ -215,7 +365,7 @@ export const ProductDetailModal: React.FC = () => {
               <div className="flex items-center justify-center gap-4 text-[11px] text-gray-500 pt-1">
                 <span className="flex items-center gap-1">
                   <ShieldCheck className="w-3.5 h-3.5 text-[#16A34A]" />
-                  ১০০% আসল গ্যাজেট
+                  ১০০% আসল পণ্য
                 </span>
                 <span className="flex items-center gap-1">
                   <Truck className="w-3.5 h-3.5 text-[#16A34A]" />
