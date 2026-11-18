@@ -25,6 +25,7 @@ import {
   sanitizeWholeStock,
   stripInternalSpecs,
 } from './sizeInventory';
+import { extractOrderAddressBreakdown } from './addressUtils';
 
 function isMissingSizeInventoryColumnError(error: { code?: string; message?: string } | null | undefined): boolean {
   if (!error) return false;
@@ -1800,12 +1801,23 @@ export const orderService = {
 };
 
 function mapDbOrderToOrder(row: any): CustomerOrder {
+  const rawAddress = String(row.delivery_address || '');
+  const parsedAddress = extractOrderAddressBreakdown({
+    deliveryAddress: rawAddress,
+    division: row.division,
+    district: row.district,
+    thana: row.thana,
+  });
+
   return {
     id: row.id,
     orderNumber: row.order_number || row.id,
     customerName: row.customer_name,
     phoneNumber: row.phone_number,
-    deliveryAddress: row.delivery_address,
+    deliveryAddress: rawAddress,
+    division: parsedAddress.division,
+    district: parsedAddress.district,
+    thana: parsedAddress.thana,
     deliveryArea: row.delivery_area || 'inside_dhaka',
     notes: row.notes,
     items: Array.isArray(row.items) ? row.items : [],

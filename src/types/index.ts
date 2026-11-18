@@ -70,6 +70,9 @@ export interface CustomerOrder {
   customerName: string;
   phoneNumber: string;
   deliveryAddress: string;
+  division?: string;
+  district?: string;
+  thana?: string;
   deliveryArea: 'inside_dhaka' | 'outside_dhaka';
   notes?: string;
   items: CartItem[];

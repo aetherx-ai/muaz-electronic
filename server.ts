@@ -80,6 +80,9 @@ interface OrderRecord {
   customerName: string;
   phoneNumber: string;
   deliveryAddress: string;
+  division?: string;
+  district?: string;
+  thana?: string;
   deliveryArea: 'inside_dhaka' | 'outside_dhaka';
   notes?: string;
   items: OrderItemRecord[];
@@ -901,6 +904,9 @@ app.post('/api/orders', async (req: Request, res: Response) => {
       customerName: String(payload.customerName || '').trim(),
       phoneNumber: String(payload.phoneNumber || '').trim(),
       deliveryAddress: String(payload.deliveryAddress || '').trim(),
+      division: payload.division ? String(payload.division).trim() : undefined,
+      district: payload.district ? String(payload.district).trim() : undefined,
+      thana: payload.thana ? String(payload.thana).trim() : undefined,
       deliveryArea: payload.deliveryArea === 'outside_dhaka' ? 'outside_dhaka' : 'inside_dhaka',
       notes: payload.notes ? String(payload.notes).trim() : undefined,
       items: items.map((item) => ({

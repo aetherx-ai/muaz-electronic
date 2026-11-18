@@ -17,6 +17,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { CustomerOrder, OrderStatus, PaymentStatus } from '../../types';
+import { extractOrderAddressBreakdown } from '../../lib/addressUtils';
 
 interface OrdersTabProps {
   orders: CustomerOrder[];
@@ -131,10 +132,13 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
           const matchName = order.customerName.toLowerCase().includes(q);
           const matchPhone = order.phoneNumber.includes(q);
           const matchAddress = order.deliveryAddress.toLowerCase().includes(q);
+          const matchLocation = [order.division, order.district, order.thana]
+            .filter(Boolean)
+            .some((loc) => String(loc).toLowerCase().includes(q));
           const matchItems = order.items.some((i) =>
             i.product.name.toLowerCase().includes(q)
           );
-          if (!matchNumber && !matchName && !matchPhone && !matchAddress && !matchItems) {
+          if (!matchNumber && !matchName && !matchPhone && !matchAddress && !matchLocation && !matchItems) {
             return false;
           }
         }
@@ -341,7 +345,13 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
                             {order.phoneNumber}
                           </span>
                           <span className="text-[11px] text-slate-400 block truncate">
-                            {order.deliveryArea === 'inside_dhaka' ? 'ঢাকা সিটি' : 'ঢাকার বাইরে'}
+                            {(() => {
+                              const addr = extractOrderAddressBreakdown(order);
+                              const areaText = order.deliveryArea === 'inside_dhaka' ? 'ঢাকা সিটি' : 'ঢাকার বাইরে';
+                              return addr.thana && addr.district
+                                ? `${addr.thana}, ${addr.district} • ${areaText}`
+                                : areaText;
+                            })()}
                           </span>
                         </div>
                       </td>
@@ -527,16 +537,51 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
                   </a>
                 </div>
 
-                <div className="space-y-1.5">
+                <div className="space-y-2">
                   <span className="font-semibold text-slate-500 text-[11px] block">
                     ডেলিভারি ঠিকানা
                   </span>
-                  <div className="flex items-start gap-1.5 text-slate-700">
-                    <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
-                    <span>{activeOrder.deliveryAddress}</span>
-                  </div>
+                  {(() => {
+                    const addr = extractOrderAddressBreakdown(activeOrder);
+                    return (
+                      <>
+                        <div className="flex items-start gap-1.5 text-slate-800 leading-relaxed">
+                          <MapPin className="w-3.5 h-3.5 text-[#16A34A] shrink-0 mt-0.5" />
+                          <span>{addr.streetAddress}</span>
+                        </div>
+                        {(addr.division || addr.district || addr.thana) && (
+                          <div className="grid grid-cols-3 gap-1.5 pt-1">
+                            {addr.thana && (
+                              <div className="bg-white border border-slate-200/80 rounded-[8px] px-2 py-1.5">
+                                <span className="text-[10px] text-slate-400 block">থানা / উপজেলা</span>
+                                <span className="text-[11px] font-semibold text-slate-800 block truncate">
+                                  {addr.thana}
+                                </span>
+                              </div>
+                            )}
+                            {addr.district && (
+                              <div className="bg-white border border-slate-200/80 rounded-[8px] px-2 py-1.5">
+                                <span className="text-[10px] text-slate-400 block">জেলা</span>
+                                <span className="text-[11px] font-semibold text-slate-800 block truncate">
+                                  {addr.district}
+                                </span>
+                              </div>
+                            )}
+                            {addr.division && (
+                              <div className="bg-white border border-slate-200/80 rounded-[8px] px-2 py-1.5">
+                                <span className="text-[10px] text-slate-400 block">বিভাগ</span>
+                                <span className="text-[11px] font-semibold text-slate-800 block truncate">
+                                  {addr.division}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
                   <div className="text-[11px] font-medium text-slate-500">
-                    এরিয়া: {activeOrder.deliveryArea === 'inside_dhaka' ? 'ঢাকা সিটির ভেতরে (৳৭০)' : 'ঢাকার বাইরে (৳১৩০)'}
+                    এরিয়া: {activeOrder.deliveryArea === 'inside_dhaka' ? 'ঢাকা সিটি (৳৭০)' : 'ঢাকার বাইরে (৳১৩০)'}
                   </div>
                   {activeOrder.notes && (
                     <div className="p-2 bg-amber-50 border border-amber-200 rounded-[8px] text-amber-900 text-[11px] mt-1">
@@ -685,7 +730,11 @@ export const OrdersTab: React.FC<OrdersTabProps> = ({
                         `${i.product.name}${i.selectedSize ? ` (${i.selectedSize})` : ''} x${i.quantity}`
                     )
                     .join(', ');
-                  const receiptText = `MUAZ ELECTRONIC INVOICE\nOrder: #${activeOrder.orderNumber}\nCustomer: ${activeOrder.customerName} (${activeOrder.phoneNumber})\nAddress: ${activeOrder.deliveryAddress}\nItems: ${itemsSummary}\nTotal: ৳${activeOrder.total}`;
+                  const addr = extractOrderAddressBreakdown(activeOrder);
+                  const locationLine = [addr.thana, addr.district, addr.division]
+                    .filter(Boolean)
+                    .join(', ');
+                  const receiptText = `MUAZ ELECTRONIC INVOICE\nOrder: #${activeOrder.orderNumber}\nCustomer: ${activeOrder.customerName} (${activeOrder.phoneNumber})\nAddress: ${addr.streetAddress}${locationLine ? `\nLocation: ${locationLine}` : ''}\nItems: ${itemsSummary}\nTotal: ৳${activeOrder.total}`;
                   copyToClipboard(receiptText, 'receipt');
                 }}
                 className="px-3.5 py-2 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-[10px] transition-colors flex items-center gap-1.5 whitespace-nowrap"
