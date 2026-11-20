@@ -1,37 +1,16 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { CartProvider, useCart } from './context/CartContext';
-import { Header } from './components/Header';
-import { Hero } from './components/Hero';
-import { ProductCatalog } from './components/ProductCatalog';
-import { BrandTrust } from './components/BrandTrust';
-import { Footer } from './components/Footer';
-import { CartDrawer } from './components/CartDrawer';
-import { ProductDetailModal } from './components/ProductDetailModal';
-import { CheckoutModal } from './components/CheckoutModal';
-import { FloatingWhatsApp } from './components/FloatingWhatsApp';
-import { MobileBottomNav } from './components/MobileBottomNav';
 import { AdminDashboard } from './pages/AdminDashboard';
 import { AdminLogin } from './pages/AdminLogin';
-import { productService, categoryService } from './lib/supabase';
-import { Product, Category } from './types';
-import { INITIAL_DETAILED_CATEGORIES } from './data/products';
 
 // Inner App Content with Route Switching and Auth state
 function MainApp() {
   const { user, loading: authLoading } = useAuth();
-  const { setSelectedProductForDetail } = useCart();
 
   // Route state
   const [currentPath, setCurrentPath] = useState<string>(() => {
     return window.location.pathname || '/';
   });
-
-  // Storefront Data state
-  const [products, setProducts] = useState<Product[]>([]);
-  const [categories, setCategories] = useState<Category[]>(INITIAL_DETAILED_CATEGORIES);
-  const [searchQuery, setSearchQuery] = useState('');
-  const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Sync with browser navigation (Back/Forward buttons)
   useEffect(() => {
@@ -48,48 +27,16 @@ function MainApp() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // Load public products and categories whenever on storefront
-  const loadStorefrontData = async () => {
-    try {
-      const [prods, cats] = await Promise.all([
-        productService.getPublicProducts(),
-        categoryService.getActiveCategories(),
-      ]);
-      setProducts(prods);
-      setCategories(cats);
-      setSelectedProductForDetail((prev) => {
-        if (!prev) return prev;
-        const fresh = prods.find((p) => p.id === prev.id);
-        return fresh || prev;
-      });
-    } catch (err) {
-      console.error('Error loading storefront data:', err);
-    }
-  };
-
   useEffect(() => {
-    if (currentPath === '/' || !currentPath.startsWith('/admin')) {
-      loadStorefrontData();
+    if (!currentPath.startsWith('/admin')) {
+      document.body.style.backgroundColor = '#000000';
+    } else {
+      document.body.style.backgroundColor = '#F8FAF9';
     }
-  }, [currentPath]);
-
-  useEffect(() => {
-    const handleProductsUpdated = () => {
-      loadStorefrontData();
+    return () => {
+      document.body.style.backgroundColor = '#F8FAF9';
     };
-    window.addEventListener('muaz-products-updated', handleProductsUpdated);
-    return () => window.removeEventListener('muaz-products-updated', handleProductsUpdated);
-  }, []);
-
-  const handleSearchClick = () => {
-    const productsSection = document.getElementById('products');
-    if (productsSection) {
-      productsSection.scrollIntoView({ behavior: 'smooth' });
-    }
-    setTimeout(() => {
-      searchInputRef.current?.focus();
-    }, 400);
-  };
+  }, [currentPath]);
 
   // ROUTE 1: ADMIN DASHBOARD OR LOGIN
   if (currentPath.startsWith('/admin')) {
@@ -104,19 +51,16 @@ function MainApp() {
       );
     }
 
-    // If authenticated, show Admin Dashboard
     if (user) {
       return (
         <AdminDashboard
           onBackToStore={() => {
-            loadStorefrontData();
             navigateTo('/');
           }}
         />
       );
     }
 
-    // If not authenticated, show Admin Login
     return (
       <AdminLogin
         onLoginSuccess={() => {
@@ -129,61 +73,25 @@ function MainApp() {
     );
   }
 
-  // ROUTE 2: PUBLIC STOREFRONT
+  // ROUTE 2: PUBLIC SITE — PURE BLACK ERROR SCREEN ONLY
   return (
-    <div className="min-h-screen bg-[#F7FAF8] text-gray-900 flex flex-col font-sans selection:bg-[#16A34A]/20 selection:text-[#16A34A]">
-      {/* Navigation Top Bar with dynamic category navigation */}
-      <Header
-        onSearchClick={handleSearchClick}
-        onNavigateToAdmin={() => navigateTo('/admin')}
-        categories={categories}
-        onSelectCategory={(catName) => {
-          setSearchQuery('');
-          const el = document.getElementById('all-products-section');
-          if (el) el.scrollIntoView({ behavior: 'smooth' });
-        }}
-      />
-
-      {/* Main Content Areas */}
-      <main className="flex-1">
-        {/* Above-the-fold Luxury Campaign Hero */}
-        <Hero />
-
-        {/* Curated Product Discovery Catalog with Live Database Items */}
-        <ProductCatalog
-          products={products}
-          categories={categories}
-          searchQuery={searchQuery}
-          setSearchQuery={setSearchQuery}
-          searchInputRef={searchInputRef}
-        />
-
-        {/* Official Brand Trust Section */}
-        <BrandTrust />
-      </main>
-
-      {/* Signature Footer */}
-      <Footer
-        onNavigateToAdmin={() => navigateTo('/admin')}
-        categories={categories}
-      />
-
-      {/* Interactive Overlays & Nav */}
-      <CartDrawer />
-      <ProductDetailModal />
-      <CheckoutModal />
-      <FloatingWhatsApp />
-      <MobileBottomNav onSearchClick={handleSearchClick} />
-    </div>
+    <main className="min-h-screen w-full bg-black text-white flex items-center justify-center p-6">
+      <div className="flex items-center gap-4 text-sm sm:text-base">
+        <h1 className="text-xl sm:text-2xl font-medium pr-4 border-r border-white/30">
+          Error
+        </h1>
+        <p className="text-white/85">
+          Something went wrong.
+        </p>
+      </div>
+    </main>
   );
 }
 
 export default function App() {
   return (
     <AuthProvider>
-      <CartProvider>
-        <MainApp />
-      </CartProvider>
+      <MainApp />
     </AuthProvider>
   );
 }
