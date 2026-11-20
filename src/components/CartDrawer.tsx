@@ -18,47 +18,45 @@ export const CartDrawer: React.FC = () => {
   if (!isCartOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-hidden bg-black/50 backdrop-blur-xs transition-opacity animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 overflow-hidden bg-black/50">
       <div className="absolute inset-0" onClick={() => setIsCartOpen(false)} />
 
       <div className="fixed inset-y-0 right-0 max-w-full flex pl-8">
-        <div className="w-screen max-w-md bg-white shadow-2xl flex flex-col justify-between">
+        <div className="w-screen max-w-md bg-white border-l border-gray-200 flex flex-col justify-between">
           
           {/* Header */}
-          <div className="p-4 sm:p-5 border-b border-gray-100 flex items-center justify-between">
+          <div className="p-4 border-b border-gray-200 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-emerald-50 text-[#16A34A] flex items-center justify-center">
-                <ShoppingCart className="w-4 h-4 stroke-[1.8]" />
-              </div>
-              <h2 className="text-base sm:text-lg font-bold text-gray-900">
+              <ShoppingCart className="w-5 h-5 text-[#16A34A]" />
+              <h2 className="text-base font-bold text-gray-900">
                 শপিং ব্যাগ ({totalItems})
               </h2>
             </div>
             <button
+              type="button"
               onClick={() => setIsCartOpen(false)}
-              className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+              className="p-1.5 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-md"
               aria-label="কার্ট বন্ধ করুন"
             >
-              <X className="w-5 h-5 stroke-[1.8]" />
+              <X className="w-5 h-5" />
             </button>
           </div>
 
           {/* Cart Item List */}
-          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-3">
+          <div className="flex-1 overflow-y-auto p-4 space-y-3">
             {items.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-center py-12">
-                <div className="w-16 h-16 rounded-full bg-gray-50 border border-gray-100 flex items-center justify-center text-gray-400 mb-3">
-                  <ShoppingCart className="w-8 h-8 stroke-[1.8] text-gray-300" />
-                </div>
-                <p className="text-base font-bold text-gray-800">আপনার ব্যাগটি খালি রয়েছে</p>
+                <ShoppingCart className="w-10 h-10 text-gray-300 mb-3" />
+                <p className="text-sm font-bold text-gray-800">আপনার ব্যাগটি খালি রয়েছে</p>
                 <p className="text-xs text-gray-500 mt-1 max-w-xs">
-                  পছন্দের পণ্য নির্বাচন করে ব্যাগে যোগ করুন এবং সহজে অর্ডার সম্পন্ন করুন।
+                  পছন্দের পণ্য নির্বাচন করে ব্যাগে যোগ করুন।
                 </p>
                 <button
+                  type="button"
                   onClick={() => setIsCartOpen(false)}
-                  className="mt-5 px-6 py-2.5 bg-[#16A34A] hover:bg-[#15803D] text-white font-semibold text-xs rounded-full transition-colors shadow-sm"
+                  className="mt-4 px-5 py-2 bg-[#16A34A] hover:bg-[#15803D] text-white font-semibold text-xs rounded-md"
                 >
-                  প্রোডাক্ট দেখুন
+                  পণ্য দেখুন
                 </button>
               </div>
             ) : (
@@ -69,12 +67,12 @@ export const CartDrawer: React.FC = () => {
                 return (
                   <div
                     key={`${item.product.id}-${item.selectedSize || 'default'}`}
-                    className="bg-gray-50/70 border border-gray-100 rounded-2xl p-3 flex gap-3 items-center hover:border-gray-200 transition-colors"
+                    className="bg-gray-50 border border-gray-200 rounded-md p-3 flex gap-3 items-center"
                   >
                     <img
                       src={item.product.image}
                       alt={item.product.name}
-                      className="w-16 h-16 object-contain rounded-xl bg-white border border-gray-100 p-1 shrink-0"
+                      className="w-14 h-14 object-contain rounded bg-white border border-gray-200 p-1 shrink-0"
                       referrerPolicy="no-referrer"
                     />
                     <div className="flex-1 min-w-0">
@@ -83,8 +81,8 @@ export const CartDrawer: React.FC = () => {
                           {item.product.name}
                         </h4>
                         {item.selectedSize && (
-                          <span className="shrink-0 text-[10px] font-bold bg-emerald-50 text-[#16A34A] border border-emerald-200 px-1.5 py-0.5 rounded-md">
-                            সাইজ: {item.selectedSize}
+                          <span className="shrink-0 text-[10px] font-semibold text-[#15803D]">
+                            (সাইজ: {item.selectedSize})
                           </span>
                         )}
                       </div>
@@ -94,9 +92,9 @@ export const CartDrawer: React.FC = () => {
                       </p>
 
                       <div className="flex items-center justify-between mt-2">
-                        {/* Quantity Stepper */}
-                        <div className="flex items-center bg-white border border-gray-200 rounded-full overflow-hidden text-xs shadow-2xs">
+                        <div className="flex items-center bg-white border border-gray-300 rounded-md overflow-hidden text-xs">
                           <button
+                            type="button"
                             onClick={() =>
                               updateQuantity(item.product.id, item.quantity - 1, item.selectedSize)
                             }
@@ -108,6 +106,7 @@ export const CartDrawer: React.FC = () => {
                             {item.quantity}
                           </span>
                           <button
+                            type="button"
                             disabled={!canIncrement}
                             onClick={() =>
                               updateQuantity(item.product.id, item.quantity + 1, item.selectedSize)
@@ -118,10 +117,10 @@ export const CartDrawer: React.FC = () => {
                           </button>
                         </div>
 
-                        {/* Remove */}
                         <button
+                          type="button"
                           onClick={() => removeFromCart(item.product.id, item.selectedSize)}
-                          className="text-gray-400 hover:text-rose-500 p-1 transition-colors"
+                          className="text-gray-400 hover:text-rose-600 p-1"
                           title="রিমুভ করুন"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -136,34 +135,35 @@ export const CartDrawer: React.FC = () => {
 
           {/* Footer & Checkout Action */}
           {items.length > 0 && (
-            <div className="p-4 sm:p-6 border-t border-gray-100 bg-gray-50/70 space-y-3.5">
+            <div className="p-4 border-t border-gray-200 bg-gray-50 space-y-3">
               <div className="space-y-1.5 text-xs">
-                <div className="flex justify-between text-gray-500">
+                <div className="flex justify-between text-gray-600">
                   <span>সাবটোটাল</span>
-                  <span className="font-bold text-gray-900 font-display tabular-nums">
+                  <span className="font-bold text-gray-900 tabular-nums">
                     ৳{subtotal.toLocaleString()}
                   </span>
                 </div>
                 <div className="flex justify-between text-gray-500">
                   <span>ডেলিভারি চার্জ</span>
-                  <span className="text-gray-500">চেকআউটে নির্ধারিত হবে</span>
+                  <span>চেকআউটে নির্ধারিত হবে</span>
                 </div>
                 <div className="pt-2 border-t border-gray-200 flex justify-between text-sm font-bold text-gray-900">
                   <span>মোট প্রদেয় মূল্য</span>
-                  <span className="text-[#16A34A] text-base font-display tabular-nums">
+                  <span className="text-[#16A34A] tabular-nums">
                     ৳{subtotal.toLocaleString()}
                   </span>
                 </div>
               </div>
 
               <button
+                type="button"
                 onClick={() => {
                   setIsCartOpen(false);
                   setIsCheckoutOpen(true);
                 }}
-                className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-[#16A34A] hover:bg-[#15803D] text-white font-bold text-xs sm:text-sm rounded-xl transition-all shadow-[0_4px_14px_rgba(22,163,74,0.3)]"
+                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-[#16A34A] hover:bg-[#15803D] text-white font-semibold text-sm rounded-md transition-colors"
               >
-                <span>অর্ডারের জন্য এগিয়ে যান</span>
+                <span>অর্ডার করুন</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>
