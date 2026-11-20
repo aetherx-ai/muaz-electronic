@@ -11,6 +11,8 @@ interface ProductCatalogProps {
   searchQuery: string;
   setSearchQuery: (query: string) => void;
   searchInputRef?: React.RefObject<HTMLInputElement | null>;
+  selectedCategory?: string;
+  onCategoryChange?: (category: string) => void;
 }
 
 export const ProductCatalog: React.FC<ProductCatalogProps> = ({
@@ -19,8 +21,15 @@ export const ProductCatalog: React.FC<ProductCatalogProps> = ({
   searchQuery,
   setSearchQuery,
   searchInputRef,
+  selectedCategory: externalCategory,
+  onCategoryChange,
 }) => {
-  const [selectedCategory, setSelectedCategory] = useState('All Products');
+  const [internalCategory, setInternalCategory] = useState('All Products');
+  const selectedCategory = externalCategory ?? internalCategory;
+  const setSelectedCategory = (cat: string) => {
+    setInternalCategory(cat);
+    onCategoryChange?.(cat);
+  };
   const [sortBy, setSortBy] = useState<'default' | 'price-asc' | 'price-desc'>('default');
 
   // Featured Products slice (exact match to reference screenshot header "ফিচার্ড পণ্য" / "সব দেখুন →")
