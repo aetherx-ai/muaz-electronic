@@ -82,25 +82,30 @@ export const ProductDetailModal: React.FC = () => {
     setTimeout(() => setAddedAnimation(false), 1500);
   };
 
-  const sizeInfo = isSizedProduct && selectedSize ? `, সাইজ: ${selectedSize}` : '';
-  const directWhatsappUrl = `https://wa.me/${WHATSAPP_INTL}?text=${encodeURIComponent(
-    `আসসালামু আলাইকুম, আমি Muaz Electronic থেকে সরাসরি "${product.name}"${sizeInfo} (পরিমাণ: ${quantity} টি, একক মূল্য: ৳${currentPrice.toLocaleString()}, মোট: ৳${(currentPrice * quantity).toLocaleString()}) অর্ডার করতে চাই।`
-  )}`;
+  const handleWhatsAppOrder = () => {
+    if (isOutOfStock) return;
+    if (isSizedProduct && !selectedSize) {
+      setSizeError('দয়া করে আগে একটি সাইজ নির্বাচন করুন');
+      return;
+    }
+    const sizeInfo = isSizedProduct && selectedSize ? `, সাইজ: ${selectedSize}` : '';
+    const text = `আসসালামু আলাইকুম, আমি Muaz Electronic থেকে সরাসরি "${product.name}"${sizeInfo} (পরিমাণ: ${quantity} টি, একক মূল্য: ৳${currentPrice.toLocaleString()}, মোট: ৳${(currentPrice * quantity).toLocaleString()}) অর্ডার করতে চাই।`;
+    window.open(`https://wa.me/${WHATSAPP_INTL}?text=${encodeURIComponent(text)}`, '_blank');
+  };
 
   return (
     <div
-      className="fixed inset-0 z-50 overflow-y-auto bg-black/50 flex items-center justify-center p-3 sm:p-6"
+      className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs flex items-center justify-center p-3.5 sm:p-6 animate-in fade-in duration-200"
       onClick={() => setSelectedProductForDetail(null)}
     >
       <div
-        className="relative w-full max-w-2xl bg-white rounded-lg overflow-hidden my-6 text-left border border-gray-200"
+        className="relative w-full max-w-2xl bg-white rounded-[24px] overflow-hidden shadow-2xl my-6 text-left border border-gray-100"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Close Button */}
         <button
-          type="button"
           onClick={() => setSelectedProductForDetail(null)}
-          className="absolute top-3 right-3 z-10 p-1.5 text-gray-500 hover:text-gray-900 bg-white border border-gray-200 rounded-md transition-colors"
+          className="absolute top-3.5 right-3.5 z-10 p-2 text-gray-500 hover:text-gray-900 bg-white/90 hover:bg-white rounded-full shadow-md transition-colors"
           aria-label="বন্ধ করুন"
         >
           <X className="w-5 h-5" />
@@ -109,16 +114,16 @@ export const ProductDetailModal: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2">
           
           {/* Left: Product Image */}
-          <div className="relative bg-gray-50 flex items-center justify-center p-6 border-b md:border-b-0 md:border-r border-gray-200">
+          <div className="relative bg-[#F9FAFB] flex items-center justify-center p-6 border-b md:border-b-0 md:border-r border-gray-100">
             <img
               src={product.image}
               alt={product.name}
-              className="w-full max-h-[280px] sm:max-h-[340px] object-contain"
+              className="w-full max-h-[300px] sm:max-h-[360px] object-contain rounded-xl"
               referrerPolicy="no-referrer"
             />
             {discountPercent !== null && discountPercent > 0 && (
-              <div className="absolute top-3 left-3 bg-[#16A34A] text-white text-xs font-semibold px-2 py-0.5 rounded">
-                -{discountPercent}%
+              <div className="absolute top-4 left-4 bg-[#16A34A] text-white text-xs font-bold px-2.5 py-1 rounded-full shadow-xs">
+                -{discountPercent}% ছাড়
               </div>
             )}
             <div className="absolute bottom-4 left-4">
@@ -320,12 +325,12 @@ export const ProductDetailModal: React.FC = () => {
                   type="button"
                   onClick={handleAddToCart}
                   disabled={isOutOfStock}
-                  className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-md font-semibold text-xs sm:text-sm transition-colors ${
+                  className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-semibold text-xs sm:text-sm transition-all shadow-sm ${
                     isOutOfStock
                       ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                       : addedAnimation
                       ? 'bg-[#15803D] text-white'
-                      : 'bg-[#16A34A] hover:bg-[#15803D] text-white'
+                      : 'bg-[#16A34A] hover:bg-[#15803D] text-white shadow-[0_2px_10px_rgba(22,163,74,0.3)]'
                   }`}
                 >
                   {isOutOfStock ? (
@@ -335,42 +340,26 @@ export const ProductDetailModal: React.FC = () => {
                     </>
                   ) : addedAnimation ? (
                     <>
-                      <Check className="w-4 h-4" />
+                      <Check className="w-4 h-4 stroke-[2.5]" />
                       <span>কার্টে যোগ হয়েছে!</span>
                     </>
                   ) : (
                     <>
-                      <ShoppingCart className="w-4 h-4" />
+                      <ShoppingCart className="w-4 h-4 stroke-[1.8]" />
                       <span>কার্টে যোগ করুন</span>
                     </>
                   )}
                 </button>
 
-                {isOutOfStock || (isSizedProduct && !selectedSize) ? (
-                  <button
-                    type="button"
-                    disabled={isOutOfStock}
-                    onClick={() => {
-                      if (isSizedProduct && !selectedSize) {
-                        setSizeError('দয়া করে আগে একটি সাইজ নির্বাচন করুন');
-                      }
-                    }}
-                    className="flex items-center justify-center gap-2 py-2.5 px-4 rounded-md font-semibold text-xs sm:text-sm bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <MessageCircle className="w-4 h-4 text-[#16A34A]" />
-                    <span>WhatsApp অর্ডার</span>
-                  </button>
-                ) : (
-                  <a
-                    href={directWhatsappUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center justify-center gap-2 py-2.5 px-4 rounded-md font-semibold text-xs sm:text-sm bg-white hover:bg-gray-50 text-gray-900 border border-gray-300 transition-colors"
-                  >
-                    <MessageCircle className="w-4 h-4 text-[#16A34A]" />
-                    <span>WhatsApp অর্ডার</span>
-                  </a>
-                )}
+                <button
+                  type="button"
+                  onClick={handleWhatsAppOrder}
+                  disabled={isOutOfStock}
+                  className="flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-semibold text-xs sm:text-sm bg-[#25D366] hover:bg-[#20ba5a] text-white transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <MessageCircle className="w-4 h-4 fill-current" />
+                  <span>WhatsApp অর্ডার</span>
+                </button>
               </div>
 
               <div className="flex items-center justify-center gap-4 text-[11px] text-gray-500 pt-1">

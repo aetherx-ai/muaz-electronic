@@ -9,6 +9,8 @@ import { Footer } from './components/Footer';
 import { CartDrawer } from './components/CartDrawer';
 import { ProductDetailModal } from './components/ProductDetailModal';
 import { CheckoutModal } from './components/CheckoutModal';
+import { FloatingWhatsApp } from './components/FloatingWhatsApp';
+import { MobileBottomNav } from './components/MobileBottomNav';
 import { AdminDashboard } from './pages/AdminDashboard';
 import { AdminLogin } from './pages/AdminLogin';
 import { productService, categoryService } from './lib/supabase';
@@ -129,13 +131,13 @@ function MainApp() {
 
   // ROUTE 2: PUBLIC STOREFRONT
   return (
-    <div className="min-h-screen bg-white text-gray-900 flex flex-col font-sans selection:bg-[#16A34A]/20 selection:text-[#16A34A]">
-      {/* Navigation Top Bar */}
+    <div className="min-h-screen bg-[#F7FAF8] text-gray-900 flex flex-col font-sans selection:bg-[#16A34A]/20 selection:text-[#16A34A]">
+      {/* Navigation Top Bar with dynamic category navigation */}
       <Header
         onSearchClick={handleSearchClick}
         onNavigateToAdmin={() => navigateTo('/admin')}
         categories={categories}
-        onSelectCategory={() => {
+        onSelectCategory={(catName) => {
           setSearchQuery('');
           const el = document.getElementById('all-products-section');
           if (el) el.scrollIntoView({ behavior: 'smooth' });
@@ -144,8 +146,10 @@ function MainApp() {
 
       {/* Main Content Areas */}
       <main className="flex-1">
+        {/* Above-the-fold Luxury Campaign Hero */}
         <Hero />
 
+        {/* Curated Product Discovery Catalog with Live Database Items */}
         <ProductCatalog
           products={products}
           categories={categories}
@@ -154,17 +158,22 @@ function MainApp() {
           searchInputRef={searchInputRef}
         />
 
+        {/* Official Brand Trust Section */}
         <BrandTrust />
       </main>
 
+      {/* Signature Footer */}
       <Footer
         onNavigateToAdmin={() => navigateTo('/admin')}
         categories={categories}
       />
 
+      {/* Interactive Overlays & Nav */}
       <CartDrawer />
       <ProductDetailModal />
       <CheckoutModal />
+      <FloatingWhatsApp />
+      <MobileBottomNav onSearchClick={handleSearchClick} />
     </div>
   );
 }
