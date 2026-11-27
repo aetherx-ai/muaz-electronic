@@ -719,12 +719,75 @@ app.post('/api/products', async (req: Request, res: Response) => {
 app.put('/api/products/:id', async (req: Request, res: Response) => {
   await withDbLock(() => {
     const { id } = req.params;
-    const updateData = req.body;
+    const updateData = (req.body && typeof req.body === 'object' ? req.body : {}) as Record<string, unknown>;
     const db = readDb();
 
     const index = db.products.findIndex((p) => p.id === id);
+
     if (index === -1) {
-      return res.status(404).json({ error: 'প্রোডাক্ট পাওয়া যায়নি' });
+      // Allow seamless upsert when editing a seeded client-side product not yet stored in db.json
+      const hasFullPayload =
+        typeof updateData.name === 'string' &&
+        updateData.name.trim().length > 0 &&
+        updateData.price !== undefined &&
+        typeof updateData.category === 'string' &&
+        updateData.category.trim().length > 0;
+
+      if (!hasFullPayload) {
+        return res.status(404).json({ error: 'প্রোডাক্ট পাওয়া যায়নি' });
+      }
+
+      const numericPrice = Number(updateData.price);
+      if (!Number.isFinite(numericPrice) || numericPrice < 0) {
+        return res.status(400).json({ error: 'সঠিক মূল্য প্রদান করুন (০ বা তার বেশি)' });
+      }
+
+      const numericSalePrice =
+        updateData.salePrice !== undefined && updateData.salePrice !== null && updateData.salePrice !== ''
+          ? Number(updateData.salePrice)
+          : undefined;
+      if (numericSalePrice !== undefined && (!Number.isFinite(numericSalePrice) || numericSalePrice < 0)) {
+        return res.status(400).json({ error: 'ডিসকাউন্ট মূল্য সঠিক নয়' });
+      }
+
+      const normalizedSizes = normalizeSizeInventory(updateData.sizeInventory);
+      const hasSizes = Boolean(normalizedSizes);
+      const computedStock = hasSizes
+        ? computeTotalStockFromSizes(normalizedSizes)
+        : sanitizeWholeStock(updateData.stock);
+
+      const now = new Date().toISOString();
+      const inserted: ProductRecord = {
+        id,
+        name: String(updateData.name).trim(),
+        ...(updateData.bengaliName && String(updateData.bengaliName).trim()
+          ? { bengaliName: String(updateData.bengaliName).trim() }
+          : {}),
+        price: numericPrice,
+        ...(numericSalePrice !== undefined && numericSalePrice > 0 ? { salePrice: numericSalePrice } : {}),
+        category: String(updateData.category).trim(),
+        brand:
+          typeof updateData.brand === 'string' && updateData.brand.trim()
+            ? updateData.brand.trim()
+            : 'MUAZ ELECTRONIC',
+        stock: computedStock,
+        hasSizes,
+        ...(hasSizes ? { sizeInventory: normalizedSizes } : {}),
+        status: updateData.status === 'draft' ? 'draft' : 'published',
+        isFeatured: Boolean(updateData.isFeatured),
+        image: typeof updateData.image === 'string' ? updateData.image : '',
+        description: typeof updateData.description === 'string' ? updateData.description : '',
+        features: Array.isArray(updateData.features)
+          ? updateData.features.map((f) => String(f).trim()).filter(Boolean)
+          : [],
+        specs: Array.isArray(updateData.specs) ? (updateData.specs as { label: string; value: string }[]) : [],
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      db.products.unshift(inserted);
+      writeDb(db);
+      return res.json({ product: inserted, success: true });
     }
 
     const existing = db.products[index];
@@ -742,15 +805,59 @@ app.put('/api/products/:id', async (req: Request, res: Response) => {
       ? sanitizeWholeStock(updateData.stock)
       : existing.stock;
 
+    if (updateData.price !== undefined) {
+      const nextPrice = Number(updateData.price);
+      if (!Number.isFinite(nextPrice) || nextPrice < 0) {
+        return res.status(400).json({ error: 'সঠিক মূল্য প্রদান করুন (০ বা তার বেশি)' });
+      }
+    }
+
+    if (
+      updateData.salePrice !== undefined &&
+      updateData.salePrice !== null &&
+      updateData.salePrice !== ''
+    ) {
+      const nextSale = Number(updateData.salePrice);
+      if (!Number.isFinite(nextSale) || nextSale < 0) {
+        return res.status(400).json({ error: 'ডিসকাউন্ট মূল্য সঠিক নয়' });
+      }
+    }
+
     const updated: ProductRecord = {
       ...existing,
-      ...updateData,
+      ...(updateData as Partial<ProductRecord>),
       id: existing.id,
+      price: updateData.price !== undefined ? Number(updateData.price) : existing.price,
       stock: computedStock,
       hasSizes,
-      sizeInventory: normalizedSizes,
       updatedAt: new Date().toISOString(),
     };
+
+    if (Object.prototype.hasOwnProperty.call(updateData, 'bengaliName')) {
+      if (updateData.bengaliName && String(updateData.bengaliName).trim()) {
+        updated.bengaliName = String(updateData.bengaliName).trim();
+      } else {
+        delete updated.bengaliName;
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(updateData, 'salePrice')) {
+      if (
+        updateData.salePrice !== null &&
+        updateData.salePrice !== '' &&
+        Number(updateData.salePrice) > 0
+      ) {
+        updated.salePrice = Number(updateData.salePrice);
+      } else {
+        delete updated.salePrice;
+      }
+    }
+
+    if (hasSizes && normalizedSizes) {
+      updated.sizeInventory = normalizedSizes;
+    } else {
+      delete updated.sizeInventory;
+    }
 
     db.products[index] = updated;
     writeDb(db);

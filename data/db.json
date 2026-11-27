@@ -91,7 +91,6 @@
       "name": "Hoco GA6 Glacier AI Semiconductor Mobile Cooler",
       "bengaliName": "হোকো GA6 সেমিকন্ডাক্টর মোবাইল ফোন কুলার",
       "price": 1500,
-      "salePrice": 1150,
       "category": "Mobile Accessories",
       "brand": "Hoco",
       "stock": 133,
@@ -103,7 +102,9 @@
         "সেমিকন্ডাক্টর ইনস্ট্যান্ট কুলিং অ্যালয় প্লেট",
         "নীরব কিন্তু শক্তিশালী টার্বো ফ্যান মোটর"
       ],
-      "updatedAt": "2026-11-18T15:25:22.638Z"
+      "updatedAt": "2026-11-27T09:06:12.604Z",
+      "hasSizes": false,
+      "salePrice": 1150
     },
     {
       "id": "hollyland-lark-m2",

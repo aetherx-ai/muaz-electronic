@@ -1,12 +1,14 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import {
   Product,
+  ProductStatus,
   StoreSettings,
   AdminUser,
   Category,
   CustomerOrder,
   OrderStatus,
   PaymentStatus,
+  SizeInventoryMap,
 } from '../types';
 import {
   INITIAL_PRODUCTS,
@@ -27,14 +29,75 @@ import {
 } from './sizeInventory';
 import { extractOrderAddressBreakdown } from './addressUtils';
 
+export type ProductUpdatePayload = Partial<
+  Omit<Product, 'bengaliName' | 'salePrice' | 'sizeInventory'>
+> & {
+  bengaliName?: string | null;
+  salePrice?: number | null;
+  sizeInventory?: SizeInventoryMap | null;
+};
+
 function isMissingSizeInventoryColumnError(error: { code?: string; message?: string } | null | undefined): boolean {
   if (!error) return false;
   const msg = (error.message || '').toLowerCase();
   return (
-    error.code === 'PGRST204' ||
-    error.code === '42703' ||
-    (msg.includes('size_inventory') && (msg.includes('schema cache') || msg.includes('column') || msg.includes('does not exist')))
+    (error.code === 'PGRST204' || error.code === '42703') &&
+    msg.includes('size_inventory')
   );
+}
+
+function extractMissingColumnName(error: { code?: string; message?: string } | null | undefined): string | null {
+  if (!error?.message) return null;
+  const msg = error.message;
+  // PostgREST PGRST204: "Could not find the 'xyz' column of 'products' in the schema cache"
+  const pgrstMatch = msg.match(/Could not find the '([^']+)' column/i);
+  if (pgrstMatch?.[1]) return pgrstMatch[1];
+  // Postgres 42703: column "xyz" of relation "products" does not exist
+  const pgMatch = msg.match(/column "([^"]+)" of relation/i);
+  if (pgMatch?.[1]) return pgMatch[1];
+  return null;
+}
+
+function dataUrlToFile(dataUrl: string, fileNamePrefix = 'product-image'): File | null {
+  try {
+    const match = dataUrl.match(/^data:(image\/[a-zA-Z0-9+.-]+);base64,(.+)$/);
+    if (!match) return null;
+    const mimeType = match[1];
+    const base64Data = match[2];
+    const binaryStr = atob(base64Data);
+    const bytes = new Uint8Array(binaryStr.length);
+    for (let i = 0; i < binaryStr.length; i++) {
+      bytes[i] = binaryStr.charCodeAt(i);
+    }
+    const ext = mimeType.split('/')[1]?.replace('jpeg', 'jpg') || 'png';
+    return new File([bytes], `${fileNamePrefix}-${Date.now()}.${ext}`, { type: mimeType });
+  } catch (err) {
+    console.error('[dataUrlToFile] Failed to convert base64 image to File:', err);
+    return null;
+  }
+}
+
+function translateProductDbError(error: { code?: string; message?: string; details?: string; hint?: string } | null | undefined): string {
+  if (!error) return 'প্রোডাক্ট আপডেট ব্যর্থ হয়েছে।';
+  const code = error.code || '';
+  const msg = (error.message || '').toLowerCase();
+
+  if (code === '42501' || msg.includes('row-level security') || msg.includes('permission denied')) {
+    return 'প্রোডাক্ট আপডেট করার অনুমতি নেই। অনুগ্রহ করে অ্যাডমিন অ্যাকাউন্ট দিয়ে পুনরায় লগইন করুন।';
+  }
+  if (code === '23514' || msg.includes('check constraint')) {
+    return 'দাম বা স্টকের পরিমাণ সঠিক নয় (ঋণাত্মক মান গ্রহণযোগ্য নয়)।';
+  }
+  if (code === '23505' || msg.includes('duplicate key')) {
+    return 'একই তথ্যসহ অন্য একটি প্রোডাক্ট ইতিমধ্যেই রয়েছে।';
+  }
+  if (code === '22P02' || msg.includes('invalid input syntax')) {
+    return 'ডাটাবেজের তথ্যের ফরম্যাট সঠিক নয়।';
+  }
+  if (code === 'PGRST116') {
+    return 'প্রোডাক্টটি ডাটাবেজে পাওয়া যায়নি অথবা আপডেট করার অনুমতি নেই।';
+  }
+  return 'প্রোডাক্ট আপডেট ব্যর্থ হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।';
 }
 
 function normalizeProductRecord(prod: Product): Product {
@@ -452,12 +515,21 @@ export const productService = {
   ): Promise<{ product: Product | null; error: string | null; success: boolean }> {
     try {
       let imageUrl = productData.image;
+      let fileToUpload = imageFile;
 
       if (isSupabaseConfigured && supabase) {
-        if (imageFile) {
-          const upload = await this.uploadProductImage(imageFile);
+        if (!fileToUpload && isBase64Image(imageUrl)) {
+          const converted = dataUrlToFile(imageUrl, 'new-product');
+          if (converted) {
+            fileToUpload = converted;
+          }
+        }
+
+        if (fileToUpload) {
+          const upload = await this.uploadProductImage(fileToUpload);
 
           if (upload.error || !upload.url) {
+            console.error('[productService.createProduct] Image upload failed:', upload.error);
             return {
               product: null,
               error: upload.error || 'ছবির URL পাওয়া যায়নি।',
@@ -495,12 +567,11 @@ export const productService = {
       };
 
       if (isSupabaseConfigured && supabase) {
-        const dbPayload = mapProductToDbPayload(newProduct);
+        let dbPayload = mapProductToDbPayload(newProduct);
         let { data, error } = await supabase
           .from('products')
           .insert([dbPayload])
-          .select()
-          .single();
+          .select();
 
         if (error && isMissingSizeInventoryColumnError(error)) {
           const fallbackPayload = { ...dbPayload };
@@ -512,24 +583,38 @@ export const productService = {
           const retry = await supabase
             .from('products')
             .insert([fallbackPayload])
-            .select()
-            .single();
+            .select();
           data = retry.data;
           error = retry.error;
+          dbPayload = fallbackPayload;
         }
 
         if (error) {
+          console.error('[productService.createProduct] Supabase insert error:', {
+            code: error.code,
+            message: error.message,
+            details: error.details,
+            hint: error.hint,
+          });
           return {
             product: null,
-            error: error.message,
+            error: translateProductDbError(error),
             success: false,
           };
         }
 
+        if (Array.isArray(data) && data.length > 0) {
+          return {
+            product: mapDbProductToProduct(data[0]),
+            error: null,
+            success: true,
+          };
+        }
+
         return {
-          product: mapDbProductToProduct(data),
-          error: null,
-          success: true,
+          product: null,
+          error: 'প্রোডাক্ট তৈরি করা যায়নি। অনুগ্রহ করে আবার চেষ্টা করুন।',
+          success: false,
         };
       }
 
@@ -540,11 +625,17 @@ export const productService = {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(newProduct),
         });
-        if (res.ok) {
+        const contentType = (res.headers.get('content-type') || '').toLowerCase();
+        const isJsonResponse = contentType.includes('application/json');
+
+        if (res.ok && isJsonResponse) {
           const data = await res.json();
           const savedProduct = normalizeProductRecord(data.product || newProduct);
+          const localList = getLocalProducts();
+          saveLocalProducts([savedProduct, ...localList.filter((p) => p.id !== savedProduct.id)]);
           return { product: savedProduct, error: null, success: true };
-        } else {
+        }
+        if (isJsonResponse) {
           const errData = await res.json().catch(() => ({}));
           return {
             product: null,
@@ -553,11 +644,14 @@ export const productService = {
           };
         }
       } catch {
-        const products = getLocalProducts();
-        saveLocalProducts([newProduct, ...products]);
-        return { product: newProduct, error: null, success: true };
+        // Static or offline fallback below
       }
+
+      const products = getLocalProducts();
+      saveLocalProducts([newProduct, ...products]);
+      return { product: newProduct, error: null, success: true };
     } catch (error: unknown) {
+      console.error('[productService.createProduct] Unexpected exception:', error);
       const message =
         error instanceof Error ? error.message : 'প্রোডাক্ট তৈরিতে সমস্যা হয়েছে';
 
@@ -567,24 +661,64 @@ export const productService = {
 
   async updateProduct(
     id: string,
-    productData: Partial<Product>,
+    productData: ProductUpdatePayload,
     imageFile?: File,
   ): Promise<{ product: Product | null; error: string | null; success: boolean }> {
     try {
+      const cleanId = typeof id === 'string' ? id.trim() : '';
+      if (!cleanId) {
+        console.error('[productService.updateProduct] Invalid empty product id:', id);
+        return {
+          product: null,
+          error: 'প্রোডাক্টের সঠিক আইডি পাওয়া যায়নি।',
+          success: false,
+        };
+      }
+
       let imageUrl = productData.image;
+      let fileToUpload = imageFile;
 
-      if (isSupabaseConfigured && supabase && imageFile) {
-        const upload = await this.uploadProductImage(imageFile);
-
-        if (upload.error || !upload.url) {
+      if (isSupabaseConfigured && supabase) {
+        // Verify active admin session before attempting protected mutation
+        const { data: sessionData, error: sessionErr } = await supabase.auth.getSession();
+        if (sessionErr || !sessionData?.session?.user) {
+          console.error('[productService.updateProduct] Missing active Supabase session:', sessionErr?.message);
           return {
             product: null,
-            error: upload.error || 'ছবির URL পাওয়া যায়নি।',
+            error: 'আপনার অ্যাডমিন সেশন শেষ হয়েছে। অনুগ্রহ করে পুনরায় লগইন করুন।',
             success: false,
           };
         }
 
-        imageUrl = upload.url;
+        // Convert base64 data URI to File if user picked/pasted a local image without File object
+        if (!fileToUpload && isBase64Image(imageUrl)) {
+          const converted = dataUrlToFile(imageUrl!, `product-${cleanId.slice(0, 12)}`);
+          if (converted) {
+            fileToUpload = converted;
+          } else {
+            console.error('[productService.updateProduct] Invalid base64 image string cannot be uploaded');
+            return {
+              product: null,
+              error: 'ছবির ফরম্যাট সঠিক নয়। অনুগ্রহ করে ছবিটি পুনরায় আপলোড করুন।',
+              success: false,
+            };
+          }
+        }
+
+        if (fileToUpload) {
+          const upload = await this.uploadProductImage(fileToUpload);
+
+          if (upload.error || !upload.url) {
+            console.error('[productService.updateProduct] Image upload failed:', upload.error);
+            return {
+              product: null,
+              error: upload.error || 'ছবির URL পাওয়া যায়নি।',
+              success: false,
+            };
+          }
+
+          imageUrl = upload.url;
+        }
       }
 
       const hasSizePayload = Object.prototype.hasOwnProperty.call(productData, 'sizeInventory');
@@ -592,12 +726,12 @@ export const productService = {
         ? normalizeSizeInventory(productData.sizeInventory)
         : undefined;
 
-      const normalizedUpdate: Partial<Product> = {
+      const normalizedUpdate: ProductUpdatePayload = {
         ...productData,
       };
 
       if (hasSizePayload) {
-        normalizedUpdate.sizeInventory = normalizedSizes;
+        normalizedUpdate.sizeInventory = normalizedSizes ?? null;
         normalizedUpdate.hasSizes = Boolean(normalizedSizes);
         if (normalizedSizes) {
           normalizedUpdate.stock = computeTotalStockFromSizes(normalizedSizes);
@@ -611,12 +745,12 @@ export const productService = {
       const now = new Date().toISOString();
 
       if (isSupabaseConfigured && supabase) {
-        const payload: Record<string, unknown> = {
+        let payload: Record<string, unknown> = {
           ...mapPartialProductToDbPayload(normalizedUpdate),
           updated_at: now,
         };
 
-        if (imageFile && imageUrl) {
+        if (fileToUpload && imageUrl) {
           payload.image = imageUrl;
         } else if (imageUrl && !isBase64Image(imageUrl)) {
           payload.image = imageUrl;
@@ -624,15 +758,21 @@ export const productService = {
           delete payload.image;
         }
 
+        // Remove any lingering undefined keys before PostgREST request
+        payload = Object.fromEntries(
+          Object.entries(payload).filter(([, value]) => value !== undefined)
+        );
+
         let { data, error } = await supabase
           .from('products')
           .update(payload)
-          .eq('id', id)
-          .select()
-          .single();
+          .eq('id', cleanId)
+          .select();
 
+        // Fallback 1: Missing size_inventory column in older Supabase schema
         if (error && isMissingSizeInventoryColumnError(error)) {
-          const fallbackPayload = { ...payload };
+          console.warn('[productService.updateProduct] size_inventory column missing, falling back to specs storage');
+          const fallbackPayload: Record<string, unknown> = { ...payload };
           delete fallbackPayload.size_inventory;
           if (hasSizePayload) {
             let baseSpecs = Array.isArray(productData.specs) ? productData.specs : undefined;
@@ -640,7 +780,7 @@ export const productService = {
               const { data: existingRow } = await supabase
                 .from('products')
                 .select('specs')
-                .eq('id', id)
+                .eq('id', cleanId)
                 .maybeSingle();
               baseSpecs = Array.isArray(existingRow?.specs) ? existingRow.specs : [];
             }
@@ -649,74 +789,246 @@ export const productService = {
           const retry = await supabase
             .from('products')
             .update(fallbackPayload)
-            .eq('id', id)
-            .select()
-            .single();
+            .eq('id', cleanId)
+            .select();
           data = retry.data;
           error = retry.error;
+          payload = fallbackPayload;
+        }
+
+        // Fallback 2: Strip any optional schema-cache missing columns and retry cleanly
+        let stripAttempts = 0;
+        while (error && (error.code === 'PGRST204' || error.code === '42703') && stripAttempts < 5) {
+          const missingCol = extractMissingColumnName(error);
+          if (!missingCol || !(missingCol in payload) || missingCol === 'name' || missingCol === 'price') {
+            break;
+          }
+          console.warn(`[productService.updateProduct] Stripping unknown column "${missingCol}" and retrying update`);
+          const nextPayload = { ...payload };
+          delete nextPayload[missingCol];
+          payload = nextPayload;
+          const retry = await supabase
+            .from('products')
+            .update(payload)
+            .eq('id', cleanId)
+            .select();
+          data = retry.data;
+          error = retry.error;
+          stripAttempts++;
         }
 
         if (error) {
-          return { product: null, error: error.message, success: false };
+          console.error('[productService.updateProduct] Supabase update error:', {
+            id: cleanId,
+            code: error.code,
+            message: error.message,
+            details: error.details,
+            hint: error.hint,
+            payloadKeys: Object.keys(payload),
+          });
+          return {
+            product: null,
+            error: translateProductDbError(error),
+            success: false,
+          };
         }
 
+        if (Array.isArray(data) && data.length > 0) {
+          return {
+            product: mapDbProductToProduct(data[0]),
+            error: null,
+            success: true,
+          };
+        }
+
+        // 0 rows returned from update(): either row does not exist yet in Supabase (seeded product) or RLS blocked UPDATE
+        const { data: existingRow, error: checkErr } = await supabase
+          .from('products')
+          .select('id')
+          .eq('id', cleanId)
+          .maybeSingle();
+
+        if (!checkErr && !existingRow && normalizedUpdate.name && normalizedUpdate.price !== undefined && normalizedUpdate.category) {
+          const fallbackInsertProduct: Product = {
+            id: cleanId,
+            name: normalizedUpdate.name,
+            bengaliName: normalizedUpdate.bengaliName || undefined,
+            price: Number(normalizedUpdate.price),
+            salePrice:
+              normalizedUpdate.salePrice !== null && normalizedUpdate.salePrice !== undefined
+                ? Number(normalizedUpdate.salePrice)
+                : undefined,
+            category: normalizedUpdate.category,
+            brand: normalizedUpdate.brand || 'MUAZ ELECTRONIC',
+            stock: sanitizeWholeStock(normalizedUpdate.stock ?? 0),
+            hasSizes: Boolean(normalizedSizes),
+            sizeInventory: normalizedSizes,
+            status: (normalizedUpdate.status as ProductStatus) || 'published',
+            isFeatured: Boolean(normalizedUpdate.isFeatured),
+            image: (payload.image as string) || imageUrl || '',
+            description: normalizedUpdate.description || '',
+            features: Array.isArray(normalizedUpdate.features) ? normalizedUpdate.features : [],
+            specs: Array.isArray(normalizedUpdate.specs) ? normalizedUpdate.specs : [],
+            createdAt: now,
+            updatedAt: now,
+          };
+
+          const insertPayload = mapProductToDbPayload(fallbackInsertProduct);
+          const { data: insertedRows, error: insertErr } = await supabase
+            .from('products')
+            .insert([insertPayload])
+            .select();
+
+          if (!insertErr && Array.isArray(insertedRows) && insertedRows.length > 0) {
+            return {
+              product: mapDbProductToProduct(insertedRows[0]),
+              error: null,
+              success: true,
+            };
+          }
+
+          console.error('[productService.updateProduct] Fallback insert for missing row failed:', insertErr);
+        }
+
+        console.error('[productService.updateProduct] Update affected 0 rows (possible RLS policy restriction or missing admin_users entry):', {
+          id: cleanId,
+          existingRow,
+          checkErr,
+        });
         return {
-          product: mapDbProductToProduct(data),
-          error: null,
-          success: true,
+          product: null,
+          error: 'প্রোডাক্ট আপডেট করার অনুমতি পাওয়া যায়নি বা প্রোডাক্টটি ডাটাবেজে পাওয়া যায়নি।',
+          success: false,
         };
       }
 
-      // Express filesystem persistence
+      // Express filesystem persistence (/api/products/:id) with clean static-host fallback
+      let apiUnavailable = false;
       try {
-        const res = await fetch(`/api/products/${encodeURIComponent(id)}`, {
+        const apiBody = {
+          ...normalizedUpdate,
+          ...(hasSizePayload ? { sizeInventory: normalizedSizes ?? null } : {}),
+          ...(imageUrl ? { image: imageUrl } : {}),
+        };
+
+        const res = await fetch(`/api/products/${encodeURIComponent(cleanId)}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            ...normalizedUpdate,
-            ...(hasSizePayload ? { sizeInventory: normalizedSizes ?? null } : {}),
-            ...(imageUrl ? { image: imageUrl } : {}),
-          }),
+          body: JSON.stringify(apiBody),
         });
-        if (res.ok) {
+
+        const contentType = (res.headers.get('content-type') || '').toLowerCase();
+        const isJsonResponse = contentType.includes('application/json');
+
+        if (res.ok && isJsonResponse) {
           const data = await res.json();
           const savedProduct = normalizeProductRecord(data.product);
+          // Keep local cache synced
+          const localList = getLocalProducts();
+          const localIdx = localList.findIndex((p) => p.id === cleanId);
+          if (localIdx !== -1) {
+            localList[localIdx] = savedProduct;
+            saveLocalProducts(localList);
+          } else {
+            saveLocalProducts([savedProduct, ...localList]);
+          }
           return { product: savedProduct, error: null, success: true };
-        } else {
+        }
+
+        if (isJsonResponse) {
           const errData = await res.json().catch(() => ({}));
+          console.error('[productService.updateProduct] Express API update failed:', {
+            id: cleanId,
+            status: res.status,
+            error: errData.error,
+          });
           return {
             product: null,
-            error: errData.error || 'প্রোডাক্ট আপডেট ব্যর্থ হয়েছে',
+            error: errData.error || 'প্রোডাক্ট আপডেট ব্যর্থ হয়েছে।',
             success: false,
           };
         }
-      } catch {
+
+        // Non-JSON 404/405/HTML indicates static hosting (e.g. server.js / CDN) without Express API
+        console.warn('[productService.updateProduct] /api/products PUT returned non-JSON status', res.status, '- falling back to local storage');
+        apiUnavailable = true;
+      } catch (fetchErr) {
+        console.warn('[productService.updateProduct] Network/API unreachable, falling back to local storage:', fetchErr);
+        apiUnavailable = true;
+      }
+
+      if (apiUnavailable) {
         const products = getLocalProducts();
-        const index = products.findIndex((product) => product.id === id);
+        const index = products.findIndex((product) => product.id === cleanId);
 
-        if (index === -1) {
+        const baseProduct: Product =
+          index !== -1
+            ? products[index]
+            : {
+                id: cleanId,
+                name: normalizedUpdate.name || '',
+                price: Number(normalizedUpdate.price || 0),
+                category: normalizedUpdate.category || 'Mobile Accessories',
+                stock: sanitizeWholeStock(normalizedUpdate.stock ?? 0),
+                status: (normalizedUpdate.status as ProductStatus) || 'published',
+                image: imageUrl || '',
+                description: normalizedUpdate.description || '',
+                features: Array.isArray(normalizedUpdate.features) ? normalizedUpdate.features : [],
+              };
+
+        if (index === -1 && (!normalizedUpdate.name || normalizedUpdate.price === undefined)) {
           return {
             product: null,
-            error: 'প্রোডাক্টটি খুঁজে পাওয়া যায়নি',
+            error: 'প্রোডাক্টটি খুঁজে পাওয়া যায়নি।',
             success: false,
           };
         }
 
-        const updatedProduct = normalizeProductRecord({
-          ...products[index],
+        const mergedProduct: Product = {
+          ...baseProduct,
           ...normalizedUpdate,
-          ...(imageUrl && !isBase64Image(imageUrl) ? { image: imageUrl } : {}),
+          bengaliName:
+            normalizedUpdate.bengaliName === null
+              ? undefined
+              : normalizedUpdate.bengaliName !== undefined
+              ? normalizedUpdate.bengaliName
+              : baseProduct.bengaliName,
+          salePrice:
+            normalizedUpdate.salePrice === null
+              ? undefined
+              : normalizedUpdate.salePrice !== undefined
+              ? normalizedUpdate.salePrice
+              : baseProduct.salePrice,
+          sizeInventory:
+            normalizedUpdate.sizeInventory === null
+              ? undefined
+              : normalizedUpdate.sizeInventory !== undefined
+              ? normalizedUpdate.sizeInventory
+              : baseProduct.sizeInventory,
+          ...(imageUrl ? { image: imageUrl } : {}),
           updatedAt: now,
-        });
+        };
 
-        products[index] = updatedProduct;
+        const updatedProduct = normalizeProductRecord(mergedProduct);
+        if (index !== -1) {
+          products[index] = updatedProduct;
+        } else {
+          products.unshift(updatedProduct);
+        }
         saveLocalProducts(products);
 
         return { product: updatedProduct, error: null, success: true };
       }
+
+      return {
+        product: null,
+        error: 'প্রোডাক্ট আপডেট ব্যর্থ হয়েছে।',
+        success: false,
+      };
     } catch (error: unknown) {
+      console.error('[productService.updateProduct] Unexpected exception:', error);
       const message =
-        error instanceof Error ? error.message : 'প্রোডাক্ট আপডেটে সমস্যা হয়েছে';
+        error instanceof Error ? error.message : 'প্রোডাক্ট আপডেটে অপ্রত্যাশিত সমস্যা হয়েছে';
 
       return { product: null, error: message, success: false };
     }
@@ -1868,44 +2180,81 @@ function mapDbProductToProduct(row: any): Product {
 function mapProductToDbPayload(product: Product): Record<string, unknown> {
   const normalizedSizes = normalizeSizeInventory(product.sizeInventory);
   const hasSizes = Boolean(normalizedSizes);
+  const numericPrice = Number(product.price);
+  const numericSalePrice =
+    product.salePrice !== undefined && product.salePrice !== null
+      ? Number(product.salePrice)
+      : NaN;
+
   const payload: Record<string, unknown> = {
     id: product.id,
-    name: product.name,
-    bengali_name: product.bengaliName || null,
-    price: product.price,
-    sale_price: product.salePrice || null,
-    category: product.category,
-    brand: product.brand || 'MUAZ ELECTRONIC',
+    name: String(product.name || '').trim(),
+    bengali_name:
+      product.bengaliName && String(product.bengaliName).trim()
+        ? String(product.bengaliName).trim()
+        : null,
+    price: Number.isFinite(numericPrice) && numericPrice >= 0 ? numericPrice : 0,
+    sale_price:
+      Number.isFinite(numericSalePrice) && numericSalePrice > 0
+        ? numericSalePrice
+        : null,
+    category: String(product.category || '').trim(),
+    brand:
+      product.brand && String(product.brand).trim()
+        ? String(product.brand).trim()
+        : 'MUAZ ELECTRONIC',
     stock: hasSizes
       ? computeTotalStockFromSizes(normalizedSizes)
       : sanitizeWholeStock(product.stock),
     size_inventory: normalizedSizes || null,
-    status: product.status,
+    status: product.status === 'draft' ? 'draft' : 'published',
     is_featured: Boolean(product.isFeatured),
-    image: product.image,
-    description: product.description,
-    features: product.features,
-    specs: stripInternalSpecs(product.specs || []),
+    image: String(product.image || '').trim(),
+    description: typeof product.description === 'string' ? product.description : '',
+    features: Array.isArray(product.features)
+      ? product.features.map((f) => String(f).trim()).filter(Boolean)
+      : [],
+    specs: stripInternalSpecs(Array.isArray(product.specs) ? product.specs : []),
   };
 
   return payload;
 }
 
 function mapPartialProductToDbPayload(
-  product: Partial<Product>,
+  product: ProductUpdatePayload,
 ): Record<string, unknown> {
   const payload: Record<string, unknown> = {};
 
-  if (product.name !== undefined) payload.name = product.name;
+  if (product.name !== undefined) {
+    payload.name = String(product.name).trim();
+  }
   if (product.bengaliName !== undefined) {
-    payload.bengali_name = product.bengaliName;
+    payload.bengali_name =
+      product.bengaliName && String(product.bengaliName).trim()
+        ? String(product.bengaliName).trim()
+        : null;
   }
-  if (product.price !== undefined) payload.price = product.price;
+  if (product.price !== undefined) {
+    const numPrice = Number(product.price);
+    if (Number.isFinite(numPrice) && numPrice >= 0) {
+      payload.price = numPrice;
+    }
+  }
   if (product.salePrice !== undefined) {
-    payload.sale_price = product.salePrice || null;
+    const numSale =
+      product.salePrice !== null ? Number(product.salePrice) : NaN;
+    payload.sale_price =
+      Number.isFinite(numSale) && numSale > 0 ? numSale : null;
   }
-  if (product.category !== undefined) payload.category = product.category;
-  if (product.brand !== undefined) payload.brand = product.brand;
+  if (product.category !== undefined) {
+    payload.category = String(product.category).trim();
+  }
+  if (product.brand !== undefined) {
+    payload.brand =
+      product.brand && String(product.brand).trim()
+        ? String(product.brand).trim()
+        : 'MUAZ ELECTRONIC';
+  }
   if (Object.prototype.hasOwnProperty.call(product, 'sizeInventory')) {
     const normalizedSizes = normalizeSizeInventory(product.sizeInventory);
     payload.size_inventory = normalizedSizes || null;
@@ -1916,14 +2265,26 @@ function mapPartialProductToDbPayload(
   if (product.stock !== undefined && payload.stock === undefined) {
     payload.stock = sanitizeWholeStock(product.stock);
   }
-  if (product.status !== undefined) payload.status = product.status;
-  if (product.isFeatured !== undefined) {
-    payload.is_featured = product.isFeatured;
+  if (product.status !== undefined) {
+    payload.status = product.status === 'draft' ? 'draft' : 'published';
   }
-  if (product.image !== undefined) payload.image = product.image;
-  if (product.description !== undefined) payload.description = product.description;
-  if (product.features !== undefined) payload.features = product.features;
-  if (product.specs !== undefined) payload.specs = stripInternalSpecs(product.specs);
+  if (product.isFeatured !== undefined) {
+    payload.is_featured = Boolean(product.isFeatured);
+  }
+  if (product.image !== undefined) {
+    payload.image = String(product.image).trim();
+  }
+  if (product.description !== undefined) {
+    payload.description = typeof product.description === 'string' ? product.description : '';
+  }
+  if (product.features !== undefined) {
+    payload.features = Array.isArray(product.features)
+      ? product.features.map((f) => String(f).trim()).filter(Boolean)
+      : [];
+  }
+  if (product.specs !== undefined) {
+    payload.specs = stripInternalSpecs(Array.isArray(product.specs) ? product.specs : []);
+  }
 
   return payload;
 }

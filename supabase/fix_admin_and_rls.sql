@@ -150,3 +150,86 @@ ON CONFLICT (slug) DO UPDATE SET
     bengali_name = EXCLUDED.bengali_name,
     is_active = true,
     updated_at = timezone('utc'::text, now());
+
+-- 7. Ensure products table columns & RLS policies allow active admins to update any product
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS bengali_name TEXT;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS sale_price NUMERIC(12, 2);
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS brand TEXT DEFAULT 'MUAZ ELECTRONIC';
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS stock INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS size_inventory JSONB DEFAULT NULL;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'published';
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS is_featured BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS description TEXT DEFAULT '';
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS features JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS specs JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now());
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now());
+
+ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
+
+DO $$
+DECLARE
+    pol RECORD;
+BEGIN
+    FOR pol IN SELECT policyname FROM pg_policies WHERE tablename = 'products' AND schemaname = 'public'
+    LOOP
+        EXECUTE format('DROP POLICY IF EXISTS %I ON public.products', pol.policyname);
+    END LOOP;
+END $$;
+
+CREATE POLICY "Public read published products"
+ON public.products
+FOR SELECT
+TO public
+USING (status = 'published' OR public.is_admin());
+
+CREATE POLICY "Admins can insert products"
+ON public.products
+FOR INSERT
+TO authenticated
+WITH CHECK (public.is_admin());
+
+CREATE POLICY "Admins can update products"
+ON public.products
+FOR UPDATE
+TO authenticated
+USING (public.is_admin())
+WITH CHECK (public.is_admin());
+
+CREATE POLICY "Admins can delete products"
+ON public.products
+FOR DELETE
+TO authenticated
+USING (public.is_admin());
+
+-- 8. Ensure storage bucket and admin storage policies exist for product images
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('product-images', 'product-images', true)
+ON CONFLICT (id) DO UPDATE SET public = true;
+
+DROP POLICY IF EXISTS "Public can view product images" ON storage.objects;
+DROP POLICY IF EXISTS "Admins can upload product images" ON storage.objects;
+DROP POLICY IF EXISTS "Admins can update product images" ON storage.objects;
+DROP POLICY IF EXISTS "Admins can delete product images" ON storage.objects;
+
+CREATE POLICY "Public can view product images"
+ON storage.objects FOR SELECT
+TO public
+USING (bucket_id = 'product-images');
+
+CREATE POLICY "Admins can upload product images"
+ON storage.objects FOR INSERT
+TO authenticated
+WITH CHECK (bucket_id = 'product-images' AND public.is_admin());
+
+CREATE POLICY "Admins can update product images"
+ON storage.objects FOR UPDATE
+TO authenticated
+USING (bucket_id = 'product-images' AND public.is_admin())
+WITH CHECK (bucket_id = 'product-images' AND public.is_admin());
+
+CREATE POLICY "Admins can delete product images"
+ON storage.objects FOR DELETE
+TO authenticated
+USING (bucket_id = 'product-images' AND public.is_admin());
+

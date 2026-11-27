@@ -15,6 +15,7 @@ import {
   categoryService,
   settingsService,
   orderService,
+  ProductUpdatePayload,
 } from '../lib/supabase';
 import { AdminSidebar, AdminTab } from '../components/admin/AdminSidebar';
 import { AdminHeader } from '../components/admin/AdminHeader';
@@ -156,28 +157,65 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore })
   };
 
   const handleSaveProduct = async (
-    productPayload: Omit<Product, 'id'>,
+    productPayload: ProductUpdatePayload | Omit<Product, 'id'>,
     imageFile?: File,
     productId?: string
   ): Promise<{ success: boolean; error: string | null }> => {
-    if (productId) {
-      const res = await productService.updateProduct(productId, productPayload, imageFile);
-      if (res.success && res.product) {
-        setProducts((prev) => prev.map((p) => (p.id === productId ? res.product! : p)));
-        window.dispatchEvent(new CustomEvent('muaz-products-updated'));
-        showToast('success', `"${res.product.name}" সফলভাবে আপডেট করা হয়েছে`);
-        return { success: true, error: null };
+    try {
+      if (productId) {
+        const res = await productService.updateProduct(productId, productPayload, imageFile);
+        if (res.success && res.product) {
+          setProducts((prev) => prev.map((p) => (p.id === productId ? res.product! : p)));
+          setEditingProduct(null);
+          window.dispatchEvent(new CustomEvent('muaz-products-updated'));
+          showToast('success', `"${res.product.name}" সফলভাবে আপডেট করা হয়েছে`);
+          // Sync full list silently from database to reflect server timestamps & normalization
+          productService
+            .getAllProductsAdmin()
+            .then((freshProducts) => {
+              if (Array.isArray(freshProducts) && freshProducts.length > 0) {
+                setProducts(freshProducts);
+              }
+            })
+            .catch((refreshErr) => {
+              console.warn('[AdminDashboard] Background product refresh skipped:', refreshErr);
+            });
+          return { success: true, error: null };
+        }
+        const errorMsg = res.error || 'প্রোডাক্ট আপডেট ব্যর্থ হয়েছে';
+        console.error('[AdminDashboard.handleSaveProduct] Update failed:', { productId, error: res.error });
+        showToast('error', errorMsg);
+        return { success: false, error: errorMsg };
+      } else {
+        const createPayload = {
+          ...(productPayload as Omit<Product, 'id'>),
+          bengaliName:
+            productPayload.bengaliName && typeof productPayload.bengaliName === 'string'
+              ? productPayload.bengaliName
+              : undefined,
+          salePrice:
+            typeof productPayload.salePrice === 'number' && productPayload.salePrice > 0
+              ? productPayload.salePrice
+              : undefined,
+          sizeInventory: productPayload.sizeInventory || undefined,
+        };
+        const res = await productService.createProduct(createPayload, imageFile);
+        if (res.product) {
+          setProducts((prev) => [res.product!, ...prev]);
+          window.dispatchEvent(new CustomEvent('muaz-products-updated'));
+          showToast('success', `"${res.product.name}" সফলভাবে স্টোরে যুক্ত হয়েছে`);
+          return { success: true, error: null };
+        }
+        const errorMsg = res.error || 'প্রোডাক্ট তৈরি করা যায়নি';
+        console.error('[AdminDashboard.handleSaveProduct] Create failed:', errorMsg);
+        showToast('error', errorMsg);
+        return { success: false, error: errorMsg };
       }
-      return { success: false, error: res.error };
-    } else {
-      const res = await productService.createProduct(productPayload, imageFile);
-      if (res.product) {
-        setProducts((prev) => [res.product!, ...prev]);
-        window.dispatchEvent(new CustomEvent('muaz-products-updated'));
-        showToast('success', `"${res.product.name}" সফলভাবে স্টোরে যুক্ত হয়েছে`);
-        return { success: true, error: null };
-      }
-      return { success: false, error: res.error };
+    } catch (err) {
+      console.error('[AdminDashboard.handleSaveProduct] Unexpected error:', err);
+      const errorMsg = 'প্রোডাক্ট সংরক্ষণে অপ্রত্যাশিত সমস্যা হয়েছে';
+      showToast('error', errorMsg);
+      return { success: false, error: errorMsg };
     }
   };
 
@@ -267,7 +305,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore })
 
     const res = await productService.updateProduct(productId, {
       hasSizes: hasAnySize,
-      sizeInventory: hasAnySize ? sizeInventory! : undefined,
+      sizeInventory: hasAnySize ? sizeInventory! : null,
       stock: total,
     });
     if (res.success && res.product) {

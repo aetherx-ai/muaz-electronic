@@ -64,12 +64,13 @@ import {
   SizeDraftMap,
 } from './ClothingSizeStockManager';
 import { AdminConfirmModal } from './AdminConfirmModal';
+import { ProductUpdatePayload } from '../../lib/supabase';
 
 interface ProductFormModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (
-    productData: Omit<Product, 'id'>,
+    productData: ProductUpdatePayload | Omit<Product, 'id'>,
     imageFile?: File,
     productId?: string
   ) => Promise<{ success: boolean; error: string | null }>;
@@ -223,6 +224,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const descTextareaRef = useRef<HTMLTextAreaElement>(null);
   const initializedKeyRef = useRef<string | null>(null);
+  const submitLockRef = useRef<boolean>(false);
 
   const useClothingSizes = useMemo(
     () => CLOTHING_SIZES.some((sz) => Boolean(sizeInventoryState[sz]?.enabled)),
@@ -353,13 +355,18 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
         setHasVariants(true);
         setShowVariantsSection(true);
         setVariantOptionName(variantSpec.label);
-        setVariantValuesInput(variantSpec.value);
-        const parsed = variantSpec.value.split(',').map((v, i) => ({
+        // Strip previous "(৳...)" suffixes when loading variant names so edits do not duplicate price suffixes
+        const parsedNames = variantSpec.value
+          .split(',')
+          .map((v) => v.replace(/\s*\(৳[^)]*\)\s*$/g, '').trim())
+          .filter(Boolean);
+        setVariantValuesInput(parsedNames.join(', '));
+        const parsed = parsedNames.map((cleanName, i) => ({
           id: String(i + 1),
-          name: v.trim(),
-          sku: `ME-${v.slice(0, 3).toUpperCase()}-${i + 1}`,
+          name: cleanName,
+          sku: `ME-${cleanName.slice(0, 3).toUpperCase()}-${i + 1}`,
           price: productToEdit.price || 0,
-          stock: Math.floor((productToEdit.stock || 20) / 2),
+          stock: Math.floor((productToEdit.stock || 20) / Math.max(1, parsedNames.length)),
         }));
         if (parsed.length > 0) setVariantsList(parsed);
       } else {
@@ -893,71 +900,102 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
   };
 
   const handleSaveWithStatus = async (targetStatus?: ProductStatus) => {
+    if (submitLockRef.current || isSubmitting) return;
     if (!validate()) return;
 
+    submitLockRef.current = true;
     setIsSubmitting(true);
+    setErrors((prev) => {
+      if (!prev.general) return prev;
+      const next = { ...prev };
+      delete next.general;
+      return next;
+    });
 
-    const cleanFeatures = features.map((f) => f.trim()).filter(Boolean);
-    const cleanSpecs = stripInternalSpecs(specs).filter(
-      (s) => s.label.trim() && s.value.trim()
-    );
+    try {
+      const cleanFeatures = features.map((f) => f.trim()).filter(Boolean);
+      const variantLabelLower = variantOptionName.trim().toLowerCase();
+      let cleanSpecs = stripInternalSpecs(specs).filter(
+        (s) =>
+          s.label.trim() &&
+          s.value.trim() &&
+          s.label.trim().toLowerCase() !== variantLabelLower
+      );
 
-    if (hasVariants && variantsList.length > 0) {
-      cleanSpecs.push({
-        label: variantOptionName,
-        value: variantsList.map((v) => `${v.name} (৳${v.price})`).join(', '),
-      });
-    }
-
-    const finalCategoryName = getCanonicalCategoryName(category, categories) || category.trim();
-    const primaryImg = activeHeroImage;
-    const primaryFile = activeMediaItem?.file;
-
-    let finalSizeInventory: SizeInventoryMap | undefined = undefined;
-    let finalStock = Number(stock);
-
-    if (useClothingSizes) {
-      const builtSizes: SizeInventoryMap = {};
-      let sum = 0;
-      for (const sz of CLOTHING_SIZES) {
-        const entry = sizeInventoryState[sz];
-        const qty = entry.enabled ? sanitizeWholeStock(entry.stock) : 0;
-        builtSizes[sz] = { enabled: Boolean(entry.enabled), stock: qty };
-        if (entry.enabled) sum += qty;
+      if (hasVariants && variantsList.length > 0) {
+        cleanSpecs = [
+          ...cleanSpecs,
+          {
+            label: variantOptionName.trim() || 'Color',
+            value: variantsList.map((v) => `${v.name.trim()} (৳${v.price})`).join(', '),
+          },
+        ];
       }
-      finalSizeInventory = builtSizes;
-      finalStock = sum;
-    }
 
-    const productPayload: Omit<Product, 'id'> = {
-      name: name.trim(),
-      bengaliName: bengaliName.trim() || undefined,
-      price: Number(price),
-      salePrice: salePrice !== '' ? Number(salePrice) : undefined,
-      category: finalCategoryName,
-      brand: brand.trim() || 'MUAZ ELECTRONIC',
-      stock: finalStock,
-      hasSizes: useClothingSizes,
-      sizeInventory: finalSizeInventory,
-      status: targetStatus || status,
-      isFeatured,
-      image: primaryImg,
-      description: description.trim(),
-      features: cleanFeatures,
-      specs: cleanSpecs,
-    };
+      const finalCategoryName = getCanonicalCategoryName(category, categories) || category.trim();
+      const primaryImg = activeHeroImage;
+      const primaryFile = activeMediaItem?.file;
 
-    const res = await onSave(productPayload, primaryFile, productToEdit?.id);
-    setIsSubmitting(false);
+      let finalSizeInventory: SizeInventoryMap | undefined = undefined;
+      let finalStock = sanitizeWholeStock(stock);
 
-    if (res.success) {
-      onClose();
-    } else {
+      if (useClothingSizes) {
+        const builtSizes: SizeInventoryMap = {};
+        let sum = 0;
+        for (const sz of CLOTHING_SIZES) {
+          const entry = sizeInventoryState[sz];
+          const qty = entry.enabled ? sanitizeWholeStock(entry.stock) : 0;
+          builtSizes[sz] = { enabled: Boolean(entry.enabled), stock: qty };
+          if (entry.enabled) sum += qty;
+        }
+        finalSizeInventory = builtSizes;
+        finalStock = sum;
+      }
+
+      const isEditingExisting = Boolean(productToEdit?.id);
+      const productPayload: ProductUpdatePayload = {
+        name: name.trim(),
+        bengaliName: bengaliName.trim() ? bengaliName.trim() : isEditingExisting ? null : undefined,
+        price: Number(price),
+        salePrice: salePrice !== '' ? Number(salePrice) : isEditingExisting ? null : undefined,
+        category: finalCategoryName,
+        brand: brand.trim() || 'MUAZ ELECTRONIC',
+        stock: finalStock,
+        hasSizes: useClothingSizes,
+        sizeInventory: useClothingSizes ? finalSizeInventory : isEditingExisting ? null : undefined,
+        status: targetStatus || status,
+        isFeatured,
+        image: primaryImg,
+        description: description.trim(),
+        features: cleanFeatures,
+        specs: cleanSpecs,
+      };
+
+      const res = await onSave(productPayload, primaryFile, productToEdit?.id);
+
+      if (res.success) {
+        onClose();
+      } else {
+        setErrors((prev) => ({
+          ...prev,
+          general:
+            res.error ||
+            (isEditingExisting
+              ? 'প্রোডাক্ট আপডেট ব্যর্থ হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।'
+              : 'প্রোডাক্ট তৈরি করা যায়নি। অনুগ্রহ করে আবার চেষ্টা করুন।'),
+        }));
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    } catch (err) {
+      console.error('[ProductFormModal.handleSaveWithStatus] Unexpected save error:', err);
       setErrors((prev) => ({
         ...prev,
-        general: res.error || 'Failed to save product',
+        general: 'প্রোডাক্ট সংরক্ষণে সমস্যা হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।',
       }));
       window.scrollTo({ top: 0, behavior: 'smooth' });
+    } finally {
+      submitLockRef.current = false;
+      setIsSubmitting(false);
     }
   };
 
